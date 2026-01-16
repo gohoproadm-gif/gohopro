@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="https://lucide.dev/logo.light.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#111827" />
+    <meta name="description" content="您的私人健身助理" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Gohopro - 健身助理</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              charcoal: {
+                750: '#2d3748',
+                800: '#1f2937',
+                900: '#111827',
+                950: '#030712',
+              },
+              neon: {
+                green: '#a3e635', // lime-400
+                blue: '#22d3ee',  // cyan-400
+                purple: '#c084fc' // purple-400
+              },
+              cta: {
+                orange: '#f97316', // orange-500
+                hover: '#ea580c'   // orange-600
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.3s ease-in-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    
+    <!-- PWA Manifest Placeholder -->
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIkdvaG9wcm8iLAogICJzaG9ydF9uYW1lIjogIkdvaG9wcm8iLAogICJzdGFydF91cmwiOiAiLyIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzExMTgyNyIsCiAgInRoZW1lX2NvbG9yIjogIiMxMTE4MjciCn0=" />
+  <script type="importmap">
+{
+  "imports": {
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.36.0",
+    "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+    "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
+    "firebase/": "https://esm.sh/firebase@^12.8.0/",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-gray-100 dark:bg-charcoal-950 text-gray-800 dark:text-gray-100 transition-colors duration-300">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

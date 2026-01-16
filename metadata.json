@@ -1,0 +1,5 @@
+{
+  "name": "Gohopro",
+  "description": "A comprehensive, mobile-first fitness assistant PWA featuring workout tracking, nutrition planning, and progress analytics.",
+  "requestFramePermissions": []
+}
