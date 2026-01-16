@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from '../lib/firebase';
-import { Dumbbell, Mail, Lock, LogIn, UserPlus, AlertCircle, ArrowRight, Activity, Chrome, HelpCircle, X, CheckCircle, Send } from 'lucide-react';
+import { Dumbbell, Mail, Lock, LogIn, UserPlus, AlertCircle, ArrowRight, Activity, Chrome, HelpCircle, X, CheckCircle, Send, ExternalLink } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -69,18 +69,22 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       setError('');
       try {
           const provider = new GoogleAuthProvider();
+          // Use popup
           await signInWithPopup(auth, provider);
           onLoginSuccess();
       } catch (err: any) {
           console.error("Google Login Error:", err);
           if (err.code === 'auth/popup-closed-by-user') {
               setError("登入已取消");
+          } else if (err.code === 'auth/popup-blocked') {
+              setError("瀏覽器擋住了登入視窗。請允許彈跳視窗，或改用一般 Email 登入。");
           } else if (err.code === 'auth/unauthorized-domain') {
-              setError(`網域未授權。請至 Firebase Console > Authentication > Settings > Authorized Domains 新增：${window.location.hostname}`);
+              const currentDomain = window.location.hostname;
+              setError(`網域未授權 (${currentDomain})。請至 Firebase Console > Authentication > Settings > Authorized Domains 新增此網域。`);
           } else if (err.code === 'auth/operation-not-allowed') {
               setError("Google 登入未啟用。請至 Firebase Console > Authentication > Sign-in method 開啟 Google。");
           } else {
-              setError("Google 登入失敗: " + err.message);
+              setError("Google 登入失敗: " + (err.message || err.code));
           }
       } finally {
           setLoading(false);
@@ -129,9 +133,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
              </h2>
 
              {error && (
-                 <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-2 text-red-500 text-sm animate-fade-in">
-                     <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                     <span className="break-words">{error}</span>
+                 <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-3 text-red-500 text-sm animate-fade-in">
+                     <AlertCircle size={20} className="shrink-0 mt-0.5" />
+                     <div className="flex flex-col gap-1">
+                        <span className="font-bold">登入錯誤</span>
+                        <span className="break-words leading-relaxed opacity-90">{error}</span>
+                     </div>
                  </div>
              )}
 
@@ -223,6 +230,13 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                          <Activity size={18} className="text-neon-green" />
                          <span className="text-sm font-bold">試用版</span>
                      </button>
+                 </div>
+                 
+                 {/* Tip for external browsers */}
+                 <div className="mt-4 text-center">
+                    <p className="text-[10px] text-gray-400">
+                        若使用 LINE 或 FB 內建瀏覽器無法登入，請點擊右上角選擇「使用 Safari/Chrome 開啟」。
+                    </p>
                  </div>
              </div>
           </div>

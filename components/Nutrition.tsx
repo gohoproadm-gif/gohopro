@@ -1,8 +1,10 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Plus, Sparkles, Loader2, X, Check, Utensils, Flame, ChevronLeft, ChevronRight, Calendar, Pencil, Trash2, Save, RefreshCw } from 'lucide-react';
+import { Plus, Sparkles, Loader2, X, Check, Utensils, Flame, ChevronLeft, ChevronRight, Calendar, Pencil, Trash2, Save, RefreshCw, AlertTriangle, Key } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { NutritionLog } from '../types';
+import { apiSaveNutritionLog, apiDeleteNutritionLog } from '../lib/db';
 
 interface NutritionProps {
   logs: NutritionLog[];
@@ -19,8 +21,13 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
   
   const [foodInput, setFoodInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   
-  // Data for the form (used for both AI result review and Editing)
+  // API Key Manual Input
+  const [showKeyInput, setShowKeyInput] = useState(false);
+  const [manualApiKey, setManualApiKey] = useState('');
+
+  // Data for the form
   const [formData, setFormData] = useState({
       item: '',
       calories: 0,
@@ -29,15 +36,12 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
       f: 0
   });
 
-  // Ref for auto-scrolling
   const resultRef = useRef<HTMLDivElement>(null);
 
-  // Filter logs by selected date
   const displayedLogs = useMemo(() => {
     return logs.filter(log => log.date === selectedDate);
   }, [logs, selectedDate]);
 
-  // Dynamic Calculation
   const totals = useMemo(() => {
     return displayedLogs.reduce((acc, curr) => ({
         calories: acc.calories + curr.calories,
@@ -50,12 +54,11 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
   const targetCalories = 2500;
   
   const macroData = [
-    { name: '蛋白質', value: totals.p, fill: '#a3e635' }, // neon-green
-    { name: '碳水化合物', value: totals.c, fill: '#22d3ee' }, // neon-blue
-    { name: '脂肪', value: totals.f, fill: '#c084fc' }, // neon-purple
+    { name: '蛋白質', value: totals.p, fill: '#a3e635' }, 
+    { name: '碳水化合物', value: totals.c, fill: '#22d3ee' },
+    { name: '脂肪', value: totals.f, fill: '#c084fc' }, 
   ];
 
-  // Auto-scroll to result when it appears
   useEffect(() => {
     if (formStep === 'RESULT' && resultRef.current) {
         setTimeout(() => {
@@ -64,18 +67,36 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
     }
   }, [formStep]);
 
-  // AI Analysis Function
+  // Helper to get key
+  const getApiKey = () => {
+      return process.env.API_KEY || localStorage.getItem('gemini_api_key') || '';
+  };
+
+  const handleSaveApiKey = () => {
+      if (manualApiKey.trim()) {
+          localStorage.setItem('gemini_api_key', manualApiKey.trim());
+          setShowKeyInput(false);
+          setAiError(null);
+          alert("API Key 已儲存！請重新嘗試分析。");
+      }
+  };
+
   const handleAnalyzeFood = async () => {
     if (!foodInput.trim()) return;
-    if (!process.env.API_KEY) {
-        alert("API Key is missing!");
+    setAiError(null);
+    setShowKeyInput(false);
+
+    const key = getApiKey();
+    if (!key) {
+        setAiError("未偵測到 API Key。");
+        setShowKeyInput(true);
         return;
     }
 
     setIsAnalyzing(true);
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: key });
         
         const response = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
@@ -110,9 +131,12 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
             });
             setFormStep('RESULT');
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error("Analysis failed", error);
-        alert("AI 分析失敗，請稍後再試或手動輸入。");
+        setAiError("AI 分析失敗: " + (error.message || "請檢查 API Key 是否有效"));
+        if (error.message?.includes('API key') || error.message?.includes('403')) {
+            setShowKeyInput(true);
+        }
     } finally {
         setIsAnalyzing(false);
     }
@@ -120,7 +144,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault(); // Prevent new line
+      e.preventDefault(); 
       handleAnalyzeFood();
     }
   };
@@ -134,36 +158,25 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
           c: log.macros.c,
           f: log.macros.f
       });
-      setFormStep('RESULT'); // Skip input, go straight to form
+      setFormStep('RESULT'); 
       setShowAddModal(true);
   };
 
-  const handleDeleteClick = (id: string) => {
+  const handleDeleteClick = async (id: string) => {
       if (window.confirm('確定要刪除這筆記錄嗎？')) {
           setLogs(prev => prev.filter(l => l.id !== id));
+          await apiDeleteNutritionLog(id);
       }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.item) return;
 
     if (editId) {
         // Edit existing
-        setLogs(prev => prev.map(l => l.id === editId ? {
-            ...l,
-            item: formData.item,
-            calories: Number(formData.calories),
-            macros: {
-                p: Number(formData.p),
-                c: Number(formData.c),
-                f: Number(formData.f)
-            }
-        } : l));
-    } else {
-        // Create new
-        const newLog: NutritionLog = {
-            id: Date.now().toString(),
-            date: selectedDate, // Use currently selected date
+        const updatedLog = {
+            id: editId,
+            date: selectedDate, 
             time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }),
             item: formData.item,
             calories: Number(formData.calories),
@@ -173,7 +186,31 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
                 f: Number(formData.f)
             }
         };
+        
+        // Optimistic Update
+        setLogs(prev => prev.map(l => l.id === editId ? updatedLog : l));
+        // Cloud Save
+        await apiSaveNutritionLog(updatedLog);
+
+    } else {
+        // Create new
+        const newLog: NutritionLog = {
+            id: Date.now().toString(),
+            date: selectedDate, 
+            time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }),
+            item: formData.item,
+            calories: Number(formData.calories),
+            macros: {
+                p: Number(formData.p),
+                c: Number(formData.c),
+                f: Number(formData.f)
+            }
+        };
+        
+        // Optimistic Update
         setLogs([newLog, ...logs]);
+        // Cloud Save
+        await apiSaveNutritionLog(newLog);
     }
     handleCloseModal();
   };
@@ -183,10 +220,11 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
       setFoodInput('');
       setEditId(null);
       setFormStep('INPUT');
+      setAiError(null);
+      setShowKeyInput(false);
       setFormData({ item: '', calories: 0, p: 0, c: 0, f: 0 });
   };
 
-  // Date Navigation Helpers
   const handlePrevDay = () => {
       const d = new Date(selectedDate);
       d.setDate(d.getDate() - 1);
@@ -201,7 +239,6 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
 
   return (
     <div className="space-y-6 pb-24 relative">
-      {/* Header and Summary */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h2 className="text-2xl font-bold">營養追蹤</h2>
@@ -298,7 +335,6 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
                                 <span className="text-lg font-bold text-gray-800 dark:text-white">{log.calories}</span>
                                 <span className="text-xs text-gray-500 block">kcal</span>
                             </div>
-                            {/* Actions */}
                             <div className="flex gap-1 ml-2 pl-2 border-l border-gray-100 dark:border-gray-700">
                                 <button 
                                     onClick={() => handleEditClick(log)}
@@ -340,7 +376,6 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
 
                   <div className="p-4 md:p-6 overflow-y-auto overscroll-contain flex-1">
                       
-                      {/* Step 1: AI Input (Only if not editing existing and not in result view) */}
                       {!editId && formStep === 'INPUT' && (
                           <div className="space-y-3 mb-6 animate-fade-in">
                               <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
@@ -350,7 +385,10 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
                               <div className="relative">
                                   <textarea 
                                       value={foodInput}
-                                      onChange={(e) => setFoodInput(e.target.value)}
+                                      onChange={(e) => {
+                                        setFoodInput(e.target.value);
+                                        if(aiError) setAiError(null);
+                                      }}
                                       onKeyDown={handleKeyDown}
                                       placeholder="例如：一碗牛肉麵、兩顆水煮蛋... (按 Enter 開始分析)"
                                       className="w-full h-32 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue resize-none text-base"
@@ -365,6 +403,36 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
                                       </div>
                                   )}
                               </div>
+
+                              {aiError && (
+                                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex flex-col gap-2 text-red-500 text-xs animate-fade-in">
+                                    <div className="flex items-start gap-2">
+                                        <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                                        <span className="break-words leading-relaxed">{aiError}</span>
+                                    </div>
+                                    {showKeyInput && (
+                                        <div className="mt-2 bg-white dark:bg-charcoal-800 p-2 rounded-lg border border-gray-200 dark:border-charcoal-700">
+                                            <label className="block text-gray-500 text-[10px] mb-1">手動輸入 Google Gemini API Key</label>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    value={manualApiKey}
+                                                    onChange={(e) => setManualApiKey(e.target.value)}
+                                                    placeholder="AIzaSy..."
+                                                    className="flex-1 bg-gray-100 dark:bg-charcoal-900 text-gray-800 dark:text-white text-xs p-2 rounded border border-gray-300 dark:border-gray-600 outline-none"
+                                                />
+                                                <button 
+                                                    onClick={handleSaveApiKey}
+                                                    className="bg-neon-blue text-charcoal-900 text-xs font-bold px-3 rounded hover:bg-cyan-400"
+                                                >
+                                                    儲存
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-gray-400 mt-1">Key 將僅儲存在您的瀏覽器中。</p>
+                                        </div>
+                                    )}
+                                </div>
+                              )}
                               
                               <button 
                                   onClick={handleAnalyzeFood}
@@ -377,7 +445,6 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
                           </div>
                       )}
 
-                      {/* Step 2: Edit Form (For Result Review OR Direct Edit) */}
                       {formStep === 'RESULT' && (
                           <div ref={resultRef} className="animate-fade-in space-y-5">
                               {!editId && (
@@ -451,7 +518,6 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
                                       {editId ? '儲存變更' : '加入記錄'}
                                   </button>
                               </div>
-                              {/* Bottom spacing for scroll */}
                               <div className="h-10"></div>
                           </div>
                       )}
