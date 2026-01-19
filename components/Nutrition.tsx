@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Plus, Sparkles, Loader2, X, Check, Utensils, Flame, ChevronLeft, ChevronRight, Calendar, Pencil, Trash2, Save, RefreshCw, AlertTriangle, Key } from 'lucide-react';
+import { Plus, Sparkles, Loader2, X, Check, Utensils, Flame, ChevronLeft, ChevronRight, Calendar, Pencil, Trash2, Save, RefreshCw, AlertTriangle } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { NutritionLog } from '../types';
 import { apiSaveNutritionLog, apiDeleteNutritionLog } from '../lib/db';
@@ -23,10 +23,6 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   
-  // API Key Manual Input
-  const [showKeyInput, setShowKeyInput] = useState(false);
-  const [manualApiKey, setManualApiKey] = useState('');
-
   // Data for the form
   const [formData, setFormData] = useState({
       item: '',
@@ -67,36 +63,20 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
     }
   }, [formStep]);
 
-  // Helper to get key
-  const getApiKey = () => {
-      return process.env.API_KEY || localStorage.getItem('gemini_api_key') || '';
-  };
-
-  const handleSaveApiKey = () => {
-      if (manualApiKey.trim()) {
-          localStorage.setItem('gemini_api_key', manualApiKey.trim());
-          setShowKeyInput(false);
-          setAiError(null);
-          alert("API Key 已儲存！請重新嘗試分析。");
-      }
-  };
-
   const handleAnalyzeFood = async () => {
     if (!foodInput.trim()) return;
     setAiError(null);
-    setShowKeyInput(false);
 
-    const key = getApiKey();
-    if (!key) {
-        setAiError("未偵測到 API Key。");
-        setShowKeyInput(true);
+    // Environment Check
+    if (!process.env.API_KEY) {
+        setAiError("系統未設定 API Key。請確認 Vercel 環境變數 API_KEY 已設定並重新部署。");
         return;
     }
 
     setIsAnalyzing(true);
 
     try {
-        const ai = new GoogleGenAI({ apiKey: key });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
         const response = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
@@ -133,10 +113,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
         }
     } catch (error: any) {
         console.error("Analysis failed", error);
-        setAiError("AI 分析失敗: " + (error.message || "請檢查 API Key 是否有效"));
-        if (error.message?.includes('API key') || error.message?.includes('403')) {
-            setShowKeyInput(true);
-        }
+        setAiError("AI 分析失敗: " + (error.message || "請稍後再試"));
     } finally {
         setIsAnalyzing(false);
     }
@@ -221,7 +198,6 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
       setEditId(null);
       setFormStep('INPUT');
       setAiError(null);
-      setShowKeyInput(false);
       setFormData({ item: '', calories: 0, p: 0, c: 0, f: 0 });
   };
 
@@ -405,32 +381,9 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
                               </div>
 
                               {aiError && (
-                                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex flex-col gap-2 text-red-500 text-xs animate-fade-in">
-                                    <div className="flex items-start gap-2">
-                                        <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                                        <span className="break-words leading-relaxed">{aiError}</span>
-                                    </div>
-                                    {showKeyInput && (
-                                        <div className="mt-2 bg-white dark:bg-charcoal-800 p-2 rounded-lg border border-gray-200 dark:border-charcoal-700">
-                                            <label className="block text-gray-500 text-[10px] mb-1">手動輸入 Google Gemini API Key</label>
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    type="text" 
-                                                    value={manualApiKey}
-                                                    onChange={(e) => setManualApiKey(e.target.value)}
-                                                    placeholder="AIzaSy..."
-                                                    className="flex-1 bg-gray-100 dark:bg-charcoal-900 text-gray-800 dark:text-white text-xs p-2 rounded border border-gray-300 dark:border-gray-600 outline-none"
-                                                />
-                                                <button 
-                                                    onClick={handleSaveApiKey}
-                                                    className="bg-neon-blue text-charcoal-900 text-xs font-bold px-3 rounded hover:bg-cyan-400"
-                                                >
-                                                    儲存
-                                                </button>
-                                            </div>
-                                            <p className="text-[10px] text-gray-400 mt-1">Key 將僅儲存在您的瀏覽器中。</p>
-                                        </div>
-                                    )}
+                                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-2 text-red-500 text-xs animate-fade-in">
+                                    <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                                    <span className="break-words leading-relaxed">{aiError}</span>
                                 </div>
                               )}
                               

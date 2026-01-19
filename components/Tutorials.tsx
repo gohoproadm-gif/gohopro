@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { X, Zap, Search, Filter, Dumbbell, Sparkles, Loader2, RotateCcw, ChevronRight, BarChart2, Info, ArrowLeft, LayoutGrid, Activity, PlayCircle, Image as ImageIcon, PenTool, WifiOff, AlertTriangle } from 'lucide-react';
+import { X, Zap, Search, Filter, Dumbbell, Sparkles, Loader2, RotateCcw, ChevronRight, BarChart2, Info, ArrowLeft, LayoutGrid, Activity, PlayCircle, Image as ImageIcon, PenTool, WifiOff, AlertTriangle, Video, Film } from 'lucide-react';
 import { Tutorial, BodyPart, EquipmentType } from '../types';
 import { TUTORIALS_DATA } from '../constants';
 
@@ -98,15 +98,21 @@ const Tutorials: React.FC = () => {
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('全部');
   const [bodyMapView, setBodyMapView] = useState<'FRONT' | 'BACK'>('FRONT');
   
+  // Media State
   const [displayImage, setDisplayImage] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [displayVideo, setDisplayVideo] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'IMAGE' | 'VIDEO'>('IMAGE');
+
+  // AI Generation State
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  
+  // Caching
   const [generatedImages, setGeneratedImages] = useState<Record<string, string>>({});
+  const [generatedVideos, setGeneratedVideos] = useState<Record<string, string>>({});
+  
   const [aiError, setAiError] = useState<string | null>(null);
   
-  // API Key Manual Input
-  const [showKeyInput, setShowKeyInput] = useState(false);
-  const [manualApiKey, setManualApiKey] = useState('');
-
   const handleBodyPartSelect = (part: BodyPart | '全部' | '其他') => {
       setSelectedBodyPart(part);
       if (part === '背部') setBodyMapView('BACK');
@@ -119,12 +125,22 @@ const Tutorials: React.FC = () => {
 
   useEffect(() => {
       setAiError(null);
+      setDisplayVideo(null);
+      setActiveTab('IMAGE');
+
       if (selectedTutorial) {
+          // Check Image Cache
           if (generatedImages[selectedTutorial.id]) {
               setDisplayImage(generatedImages[selectedTutorial.id]);
           } else {
               const placeholder = generateOfflinePlaceholder(selectedTutorial);
               setDisplayImage(placeholder);
+          }
+
+          // Check Video Cache
+          if (generatedVideos[selectedTutorial.id]) {
+              setDisplayVideo(generatedVideos[selectedTutorial.id]);
+              setActiveTab('VIDEO');
           }
       } else {
           setDisplayImage(null);
@@ -150,19 +166,6 @@ const Tutorials: React.FC = () => {
     });
   }, [searchTerm, selectedEquipment, selectedBodyPart, selectedSubCategory]);
 
-  const availableSubCategories = useMemo(() => {
-      if (selectedBodyPart === '全部') return [];
-      
-      const subs = new Set<string>();
-      TUTORIALS_DATA.filter(t => {
-          if (selectedBodyPart === '其他') return t.bodyPart === '核心' || t.bodyPart === '有氧';
-          return t.bodyPart === selectedBodyPart;
-      }).forEach(t => {
-          if(t.subCategory) subs.add(t.subCategory);
-      });
-      return Array.from(subs);
-  }, [selectedBodyPart]);
-
   const equipments: (EquipmentType | '全部')[] = ['全部', '徒手', '固定器械', '啞鈴'];
 
   const getDifficultyColor = (diff: string) => {
@@ -183,57 +186,44 @@ const Tutorials: React.FC = () => {
       }
   };
 
-  // --- Expert Fitness Coach SVG Generator (Optimized) ---
   const generateOfflinePlaceholder = (tutorial: Tutorial): string => {
-    // Re-implemented fully to ensure file integrity in XML output
     const colors: Record<string, string> = {
         '胸部': '#ea580c', '背部': '#c084fc', '腿部': '#a3e635', 
         '肩膀': '#22d3ee', '手臂': '#facc15', '核心': '#f87171', '有氧': '#2dd4bf',
     };
     
     const accentColor = colors[tutorial.bodyPart] || '#9ca3af';
-    const skinColor = "#374151"; 
     
-    // Simplified placeholder SVG logic for brevity in this update, but functional
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 250" style="background-color: #f8fafc;">
         <rect width="100%" height="100%" fill="white" />
         <text x="100" y="125" font-family="sans-serif" font-size="20" fill="${accentColor}" text-anchor="middle">${tutorial.name}</text>
-        <text x="100" y="150" font-family="sans-serif" font-size="12" fill="#999" text-anchor="middle">AI Image Ready to Generate</text>
+        <text x="100" y="150" font-family="sans-serif" font-size="12" fill="#999" text-anchor="middle">Click AI Button to Generate</text>
       </svg>
     `;
     return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
   };
 
-  const getApiKey = () => {
-      return process.env.API_KEY || localStorage.getItem('gemini_api_key') || '';
-  };
-
-  const handleSaveApiKey = () => {
-      if (manualApiKey.trim()) {
-          localStorage.setItem('gemini_api_key', manualApiKey.trim());
-          setShowKeyInput(false);
-          setAiError(null);
-          alert("API Key 已儲存！請重新嘗試生成。");
-      }
-  };
-
+  // --- AI Image Generation (High Quality 3D) ---
   const handleGenerateImage = async (tutorial: Tutorial) => {
-    setIsGenerating(true);
+    setIsGeneratingImage(true);
     setAiError(null);
-    setShowKeyInput(false);
+    setActiveTab('IMAGE');
 
-    const key = getApiKey();
-    if (!key) {
-        setAiError("API Key 未設定。");
-        setShowKeyInput(true);
-        setIsGenerating(false);
+    if (!process.env.API_KEY) {
+        setAiError("系統未設定 API Key。");
+        setIsGeneratingImage(false);
         return;
     }
     
     try {
-        const ai = new GoogleGenAI({ apiKey: key });
-        const prompt = `Create a professional, minimalist technical illustration of the fitness exercise: "${tutorial.name}". Style: High-quality vector line art on a white background.`;
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        // Enhanced Prompt for "Exquisite" results
+        const prompt = `Hyper-realistic 3D anatomical fitness illustration of "${tutorial.name}". 
+                        Show a fit character performing the exercise with perfect form. 
+                        Highlight the ${tutorial.bodyPart} muscles glowing slightly to show engagement.
+                        Clean, professional studio lighting, 8k resolution, cinematic composition, white background. 
+                        Style: Medical anatomy meets high-end fitness magazine.`;
         
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
@@ -260,13 +250,76 @@ const Tutorials: React.FC = () => {
 
     } catch (error: any) {
         console.error("Failed to generate image:", error);
-        setAiError("生成失敗，請稍後再試。");
-        if (error.message?.includes('API key') || error.message?.includes('403')) {
-            setShowKeyInput(true);
-        }
+        setAiError("圖片生成失敗，請稍後再試。");
     } finally {
-        setIsGenerating(false);
+        setIsGeneratingImage(false);
     }
+  };
+
+  // --- AI Video Generation (Veo) ---
+  const handleGenerateVideo = async (tutorial: Tutorial) => {
+      setIsGeneratingVideo(true);
+      setAiError(null);
+      setActiveTab('VIDEO');
+
+      if (!process.env.API_KEY) {
+          setAiError("系統未設定 API Key。");
+          setIsGeneratingVideo(false);
+          return;
+      }
+
+      try {
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const prompt = `Cinematic video of a fitness trainer demonstrating the ${tutorial.name} exercise with perfect form. 
+                          Medium shot, professional gym studio background with soft lighting. 
+                          High resolution, realistic movement, 4k.`;
+
+          let operation = await ai.models.generateVideos({
+              model: 'veo-3.1-fast-generate-preview',
+              prompt: prompt,
+              config: {
+                  numberOfVideos: 1,
+                  resolution: '720p',
+                  aspectRatio: '1:1'
+              }
+          });
+
+          // Polling Loop
+          let retryCount = 0;
+          const maxRetries = 60; // Wait up to ~5 minutes
+          while (!operation.done && retryCount < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 5000)); // Check every 5s
+              operation = await ai.operations.getVideosOperation({operation: operation});
+              retryCount++;
+          }
+
+          if (!operation.done) throw new Error("Video generation timed out.");
+
+          const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+          
+          if (downloadLink) {
+              // Fetch the actual video bytes using the key
+              const videoRes = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+              const videoBlob = await videoRes.blob();
+              const videoUrl = URL.createObjectURL(videoBlob);
+              
+              setGeneratedVideos(prev => ({ ...prev, [tutorial.id]: videoUrl }));
+              setDisplayVideo(videoUrl);
+          } else {
+              throw new Error("Video URI not found.");
+          }
+
+      } catch (error: any) {
+          console.error("Failed to generate video:", error);
+          if (error.message?.includes("403") || error.message?.includes("billing")) {
+               setAiError("影片生成需要 Google Cloud 付費專案 (Veo Model)。請嘗試生成圖片。");
+          } else {
+               setAiError("影片生成失敗: " + (error.message || "未知錯誤"));
+          }
+          setActiveTab('IMAGE');
+      } finally {
+          setIsGeneratingVideo(false);
+      }
   };
 
   const CategoryGrid = () => {
@@ -384,34 +437,70 @@ const Tutorials: React.FC = () => {
       {selectedTutorial && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-charcoal-800 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto flex flex-col">
+             
+             {/* Media Area */}
              <div className="relative h-64 md:h-80 bg-gray-100 dark:bg-black border-b border-gray-200 dark:border-charcoal-700 shrink-0 group">
                 <button onClick={() => setSelectedTutorial(null)} className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full backdrop-blur-md transition-colors z-20"><X size={20} /></button>
+                
                 <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
-                     {!displayImage && <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #555 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>}
-                     {displayImage ? <img src={displayImage} alt={selectedTutorial.name} className="w-full h-full object-contain p-4 animate-fade-in bg-white" /> : <div className="flex flex-col items-center justify-center h-full text-gray-400"><Loader2 className="animate-spin mb-2" /><span className="text-xs">載入圖解中...</span></div>}
+                     {activeTab === 'IMAGE' && (
+                         <>
+                            {!displayImage && <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #555 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>}
+                            {displayImage ? <img src={displayImage} alt={selectedTutorial.name} className="w-full h-full object-contain p-4 animate-fade-in bg-white" /> : <div className="flex flex-col items-center justify-center h-full text-gray-400"><Loader2 className="animate-spin mb-2" /><span className="text-xs">載入圖解中...</span></div>}
+                         </>
+                     )}
+                     
+                     {activeTab === 'VIDEO' && (
+                         <div className="w-full h-full bg-black flex items-center justify-center">
+                             {displayVideo ? (
+                                 <video src={displayVideo} controls autoPlay loop className="w-full h-full object-cover" />
+                             ) : (
+                                 <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
+                                     {isGeneratingVideo ? (
+                                         <>
+                                            <Loader2 className="animate-spin text-neon-blue" size={32} />
+                                            <div className="text-center">
+                                                <span className="text-sm font-bold text-white block">AI 影片生成中...</span>
+                                                <span className="text-xs text-gray-500">這可能需要 1-2 分鐘，請耐心等候</span>
+                                            </div>
+                                         </>
+                                     ) : (
+                                        <Film size={32} />
+                                     )}
+                                 </div>
+                             )}
+                         </div>
+                     )}
                 </div>
-                {(!generatedImages[selectedTutorial.id] || displayImage !== generatedImages[selectedTutorial.id]) && (
-                    <div className="absolute inset-x-0 bottom-6 flex flex-col items-center justify-center z-20 pointer-events-none gap-2">
-                        {aiError && (
-                             <div className="bg-red-500/90 text-white text-xs px-3 py-1 rounded-full mb-1 flex flex-col items-center gap-1 shadow-lg pointer-events-auto">
-                                <div className="flex items-center gap-1"><AlertTriangle size={12}/> {aiError}</div>
-                                {showKeyInput && (
-                                    <div className="mt-1 bg-white dark:bg-charcoal-800 p-2 rounded border border-gray-200 dark:border-charcoal-700 flex gap-2">
-                                        <input type="text" value={manualApiKey} onChange={(e) => setManualApiKey(e.target.value)} placeholder="AIzaSy..." className="bg-gray-100 dark:bg-charcoal-900 text-gray-800 dark:text-white text-xs p-1 rounded outline-none" />
-                                        <button onClick={handleSaveApiKey} className="bg-neon-blue text-charcoal-900 text-xs font-bold px-2 rounded hover:bg-cyan-400">Save</button>
-                                    </div>
-                                )}
-                             </div>
-                        )}
+
+                {/* AI Controls Overlay */}
+                <div className="absolute inset-x-0 bottom-4 flex flex-col items-center justify-center z-20 pointer-events-none gap-2">
+                    {aiError && (
+                            <div className="bg-red-500/90 text-white text-xs px-3 py-1 rounded-full mb-1 flex flex-col items-center gap-1 shadow-lg pointer-events-auto max-w-[90%] text-center">
+                            <div className="flex items-center gap-1"><AlertTriangle size={12}/> {aiError}</div>
+                            </div>
+                    )}
+                    
+                    <div className="flex items-center gap-2 pointer-events-auto">
                         <button 
                             onClick={(e) => { e.stopPropagation(); handleGenerateImage(selectedTutorial); }}
-                            disabled={isGenerating}
-                            className="pointer-events-auto bg-neon-blue hover:bg-cyan-400 text-charcoal-900 px-6 py-3 rounded-full font-bold shadow-xl shadow-neon-blue/20 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group/btn"
+                            disabled={isGeneratingImage || isGeneratingVideo}
+                            className={`bg-white dark:bg-charcoal-900 text-charcoal-900 dark:text-white px-4 py-2 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 text-xs border border-gray-200 dark:border-charcoal-600 ${activeTab === 'IMAGE' ? 'ring-2 ring-neon-blue' : 'opacity-80 hover:opacity-100'}`}
                         >
-                            {isGenerating ? <><Loader2 className="animate-spin text-charcoal-900" size={20} /><span>AI 繪製中...</span></> : <><Sparkles className="text-charcoal-900 group-hover/btn:animate-pulse" size={20} /><span>AI 高清圖解</span></>}
+                            {isGeneratingImage ? <Loader2 className="animate-spin" size={14} /> : <ImageIcon size={14} />}
+                            3D 圖解
+                        </button>
+                        
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); handleGenerateVideo(selectedTutorial); }}
+                            disabled={isGeneratingImage || isGeneratingVideo}
+                            className={`bg-neon-blue hover:bg-cyan-400 text-charcoal-900 px-4 py-2 rounded-full font-bold shadow-lg shadow-neon-blue/20 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 text-xs ${activeTab === 'VIDEO' ? 'ring-2 ring-white' : ''}`}
+                        >
+                             {isGeneratingVideo ? <Loader2 className="animate-spin" size={14} /> : <Video size={14} />}
+                             AI 影片生成
                         </button>
                     </div>
-                )}
+                </div>
              </div>
              
              <div className="p-6 md:p-8 flex flex-col md:flex-row gap-8">

@@ -66,10 +66,6 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  
-  // API Key Manual Input
-  const [showKeyInput, setShowKeyInput] = useState(false);
-  const [manualApiKey, setManualApiKey] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
@@ -158,34 +154,18 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       setMode('CALENDAR');
   };
 
-  const getApiKey = () => {
-      return process.env.API_KEY || localStorage.getItem('gemini_api_key') || '';
-  };
-
-  const handleSaveApiKey = () => {
-      if (manualApiKey.trim()) {
-          localStorage.setItem('gemini_api_key', manualApiKey.trim());
-          setShowKeyInput(false);
-          setAiError(null);
-          alert("API Key 已儲存！請重新嘗試生成。");
-      }
-  };
-
   const handleGeneratePlan = async () => {
       if (!aiPrompt.trim()) return;
       setAiError(null);
-      setShowKeyInput(false);
 
-      const key = getApiKey();
-      if (!key) {
-          setAiError("未偵測到 API Key。");
-          setShowKeyInput(true);
+      if (!process.env.API_KEY) {
+          setAiError("系統未設定 API Key。請確認 Vercel 環境變數 API_KEY 已設定並重新部署。");
           return;
       }
 
       setIsGenerating(true);
       try {
-          const ai = new GoogleGenAI({ apiKey: key });
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
           const response = await ai.models.generateContent({
               model: 'gemini-3-flash-preview',
               contents: `Create a workout plan based on this request: "${aiPrompt}".
@@ -231,9 +211,6 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       } catch (e: any) {
           console.error("AI Plan Error", e);
           setAiError("生成失敗: " + (e.message || "未知錯誤"));
-          if (e.message?.includes('API key') || e.message?.includes('403')) {
-            setShowKeyInput(true);
-          }
       } finally {
           setIsGenerating(false);
       }
@@ -476,30 +453,8 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                     />
                     
                     {aiError && (
-                        <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 text-xs rounded-lg flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                                <AlertTriangle size={14} /> {aiError}
-                            </div>
-                            {showKeyInput && (
-                                <div className="mt-1 bg-white dark:bg-charcoal-800 p-2 rounded border border-gray-200 dark:border-charcoal-700">
-                                    <label className="block text-gray-500 text-[10px] mb-1">Google Gemini API Key</label>
-                                    <div className="flex gap-2">
-                                        <input 
-                                            type="text" 
-                                            value={manualApiKey}
-                                            onChange={(e) => setManualApiKey(e.target.value)}
-                                            placeholder="AIzaSy..."
-                                            className="flex-1 bg-gray-100 dark:bg-charcoal-900 text-gray-800 dark:text-white text-xs p-1.5 rounded border border-gray-300 dark:border-gray-600 outline-none"
-                                        />
-                                        <button 
-                                            onClick={handleSaveApiKey}
-                                            className="bg-neon-blue text-charcoal-900 text-xs font-bold px-3 rounded hover:bg-cyan-400"
-                                        >
-                                            儲存
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
+                        <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 text-xs rounded-lg flex items-center gap-2">
+                            <AlertTriangle size={14} /> {aiError}
                         </div>
                     )}
 
