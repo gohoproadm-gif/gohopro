@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Activity, Flame, Clock, Trophy, User, ArrowRight, Target } from 'lucide-react';
+import { Activity, Flame, Clock, Trophy, User, ArrowRight, Target, Droplets, Plus, Minus } from 'lucide-react';
 import { MOTIVATIONAL_QUOTES, DEFAULT_PLANS } from '../constants';
 import { NutritionLog, UserProfile, ScheduledWorkout, DailyPlan } from '../types';
 
@@ -20,6 +20,25 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
   // Logic to find Next Workout
   const [nextWorkout, setNextWorkout] = useState<{title: string, duration: number} | null>(null);
 
+  // Water Tracker State (Local Persistence)
+  const [waterIntake, setWaterIntake] = useState(0);
+  const dailyWaterGoal = 2500; // ml
+
+  useEffect(() => {
+      const savedWater = localStorage.getItem(`water_${todayStr}`);
+      if (savedWater) {
+          setWaterIntake(parseInt(savedWater));
+      } else {
+          setWaterIntake(0);
+      }
+  }, [todayStr]);
+
+  const updateWater = (amount: number) => {
+      const newVal = Math.max(0, waterIntake + amount);
+      setWaterIntake(newVal);
+      localStorage.setItem(`water_${todayStr}`, newVal.toString());
+  };
+
   useEffect(() => {
     const savedSchedule = localStorage.getItem('fitlife_schedule');
     if (savedSchedule) {
@@ -33,7 +52,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
              }
         }
     }
-    // Fallback if no schedule found or all completed, show nothing or a generic message logic could go here
   }, [todayStr]);
 
   const totalNutrition = useMemo(() => {
@@ -46,7 +64,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
   }, [todaysLogs]);
 
   // Calculate Targets based on Profile
-  // Simple TDEE estimation (Mifflin-St Jeor)
   const calculateTargets = () => {
     if (!userProfile) return { calories: 2000, p: 150, c: 200, f: 60 };
 
@@ -61,7 +78,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
 
     let tdee = Math.round(bmr * multiplier);
 
-    // Adjust for goal
     if (userProfile.goal === 'lose_weight') tdee -= 500;
     if (userProfile.goal === 'gain_muscle') tdee += 300;
 
@@ -85,7 +101,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
     ? (userProfile.weight / ((userProfile.height / 100) * (userProfile.height / 100))).toFixed(1) 
     : '0';
 
-  // Simple SVG Progress Ring Component
   const ProgressRing = ({ radius, stroke, progress, color }: { radius: number, stroke: number, progress: number, color: string }) => {
     const normalizedRadius = radius - stroke * 2;
     const circumference = normalizedRadius * 2 * Math.PI;
@@ -161,70 +176,56 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
             </div>
           </div>
 
-          {/* Body Info & Nutrition Goals Card */}
-          <div className="bg-white dark:bg-charcoal-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 flex flex-col">
-              <div className="flex items-center justify-between mb-4 border-b border-gray-200 dark:border-gray-700 pb-3">
-                  <h3 className="font-bold text-lg flex items-center gap-2">
-                      <User className="text-neon-blue" size={20} /> 身體數據
-                  </h3>
-                  <button className="text-xs text-gray-500 hover:text-white transition-colors flex items-center gap-1">
-                      更新 <ArrowRight size={12} />
-                  </button>
-              </div>
+          {/* Right Column Stack */}
+          <div className="flex flex-col gap-6">
               
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className="text-center">
-                      <span className="block text-2xl font-bold">{userProfile.height}</span>
-                      <span className="text-xs text-gray-500">身高 (cm)</span>
+              {/* Body Info */}
+              <div className="bg-white dark:bg-charcoal-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
+                  <div className="flex items-center justify-between mb-4 border-b border-gray-200 dark:border-gray-700 pb-3">
+                      <h3 className="font-bold text-lg flex items-center gap-2">
+                          <User className="text-neon-blue" size={20} /> 身體數據
+                      </h3>
                   </div>
-                  <div className="text-center border-x border-gray-200 dark:border-gray-700">
-                      <span className="block text-2xl font-bold">{userProfile.weight}</span>
-                      <span className="text-xs text-gray-500">體重 (kg)</span>
-                  </div>
-                  <div className="text-center">
-                      <span className={`block text-2xl font-bold ${Number(bmi) > 24 ? 'text-orange-400' : 'text-neon-green'}`}>{bmi}</span>
-                      <span className="text-xs text-gray-500">BMI</span>
+                  <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center">
+                          <span className="block text-xl font-bold">{userProfile.height}</span>
+                          <span className="text-xs text-gray-500">cm</span>
+                      </div>
+                      <div className="text-center border-x border-gray-200 dark:border-gray-700">
+                          <span className="block text-xl font-bold">{userProfile.weight}</span>
+                          <span className="text-xs text-gray-500">kg</span>
+                      </div>
+                      <div className="text-center">
+                          <span className={`block text-xl font-bold ${Number(bmi) > 24 ? 'text-orange-400' : 'text-neon-green'}`}>{bmi}</span>
+                          <span className="text-xs text-gray-500">BMI</span>
+                      </div>
                   </div>
               </div>
 
-              <div className="mt-auto">
-                   <h4 className="font-bold text-sm mb-3 flex items-center gap-2 text-gray-400">
-                       <Target size={16} /> 剩餘營養需求
-                   </h4>
-                   <div className="space-y-3">
-                       {/* Remaining Calories Bar */}
-                       <div>
-                           <div className="flex justify-between text-xs mb-1">
-                               <span>能量 ({remaining.calories > 0 ? remaining.calories : 0} kcal 剩餘)</span>
-                               <span className="text-gray-400">{totalNutrition.calories} / {targets.calories}</span>
-                           </div>
-                           <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                               <div 
-                                 className="h-full bg-cta-orange rounded-full transition-all duration-1000" 
-                                 style={{ width: `${Math.min((totalNutrition.calories / targets.calories) * 100, 100)}%` }}
-                               />
-                           </div>
-                       </div>
+              {/* Water Tracker Widget */}
+              <div className="bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl p-6 shadow-lg text-white relative overflow-hidden">
+                   <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="font-bold text-lg flex items-center gap-2"><Droplets size={20}/> 飲水追蹤</h3>
+                            <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded">{Math.round((waterIntake/dailyWaterGoal)*100)}%</span>
+                        </div>
+                        
+                        <div className="flex items-end gap-1 mb-4">
+                            <span className="text-4xl font-bold">{waterIntake}</span>
+                            <span className="text-sm opacity-80 mb-1">/ {dailyWaterGoal} ml</span>
+                        </div>
 
-                       {/* Macros Grid */}
-                       <div className="grid grid-cols-3 gap-2">
-                           <div className="bg-gray-50 dark:bg-charcoal-900 p-2 rounded-lg text-center">
-                               <div className="text-[10px] text-gray-500 mb-1">蛋白質</div>
-                               <div className="text-sm font-bold text-neon-green">{remaining.p > 0 ? remaining.p : 0}g</div>
-                               <div className="text-[10px] text-gray-600">剩餘</div>
-                           </div>
-                           <div className="bg-gray-50 dark:bg-charcoal-900 p-2 rounded-lg text-center">
-                               <div className="text-[10px] text-gray-500 mb-1">碳水</div>
-                               <div className="text-sm font-bold text-neon-blue">{remaining.c > 0 ? remaining.c : 0}g</div>
-                               <div className="text-[10px] text-gray-600">剩餘</div>
-                           </div>
-                           <div className="bg-gray-50 dark:bg-charcoal-900 p-2 rounded-lg text-center">
-                               <div className="text-[10px] text-gray-500 mb-1">脂肪</div>
-                               <div className="text-sm font-bold text-neon-purple">{remaining.f > 0 ? remaining.f : 0}g</div>
-                               <div className="text-[10px] text-gray-600">剩餘</div>
-                           </div>
-                       </div>
+                        <div className="flex gap-3">
+                             <button onClick={() => updateWater(250)} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg backdrop-blur-sm transition-colors flex items-center gap-1 text-sm font-bold">
+                                 <Plus size={14} /> 250ml
+                             </button>
+                             <button onClick={() => updateWater(-250)} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg backdrop-blur-sm transition-colors">
+                                 <Minus size={14} />
+                             </button>
+                        </div>
                    </div>
+                   {/* Decorative Wave */}
+                   <div className="absolute bottom-0 left-0 right-0 h-24 bg-white/10" style={{ clipPath: 'polygon(0% 100%, 100% 100%, 100% 60%, 75% 75%, 50% 60%, 25% 75%, 0% 60%)' }}></div>
               </div>
           </div>
       </div>

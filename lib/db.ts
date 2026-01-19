@@ -1,6 +1,6 @@
 
 import { db, auth, doc, getDoc, setDoc, deleteDoc, collection, query, orderBy, getDocs } from './firebase'; 
-import { UserProfile, WorkoutRecord, NutritionLog, ScheduledWorkout } from '../types';
+import { UserProfile, WorkoutRecord, NutritionLog, ScheduledWorkout, CalendarEvent } from '../types';
 import { MOCK_HISTORY, NUTRITION_LOGS } from '../constants';
 
 // --- SERVICE ABSTRACTION LAYER ---
@@ -162,6 +162,60 @@ export const apiSaveSchedule = async (schedule: ScheduledWorkout[]): Promise<voi
             await setDoc(doc(db, `users/${auth.currentUser.uid}/settings/schedule`), { items: schedule });
         } catch (e) {
             console.error("Cloud save schedule error", e);
+        }
+    }
+};
+
+// --- EVENTS (Timetable) ---
+export const apiGetEvents = async (): Promise<CalendarEvent[]> => {
+    if (isCloudEnabled() && auth.currentUser) {
+        try {
+            const q = query(
+                collection(db, `users/${auth.currentUser.uid}/events`)
+            );
+            const querySnapshot = await getDocs(q);
+            const events = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CalendarEvent));
+            localStorage.setItem('fitlife_events', JSON.stringify(events));
+            return events;
+        } catch (e) {
+            console.error("Cloud fetch events error", e);
+        }
+    }
+    const local = localStorage.getItem('fitlife_events');
+    return local ? JSON.parse(local) : [];
+};
+
+export const apiSaveEvent = async (event: CalendarEvent): Promise<void> => {
+     // Local Update
+    const current = localStorage.getItem('fitlife_events');
+    const events = current ? JSON.parse(current) : [];
+    // remove existing if exists (edit) then add
+    const newEvents = [...events.filter((e: CalendarEvent) => e.id !== event.id), event];
+    localStorage.setItem('fitlife_events', JSON.stringify(newEvents));
+
+    if (isCloudEnabled() && auth.currentUser) {
+        try {
+            await setDoc(doc(db, `users/${auth.currentUser.uid}/events`, event.id), event);
+        } catch (e) {
+            console.error("Cloud save event error", e);
+        }
+    }
+};
+
+export const apiDeleteEvent = async (eventId: string): Promise<void> => {
+     // Local Update
+    const current = localStorage.getItem('fitlife_events');
+    if (current) {
+        const events = JSON.parse(current);
+        const newEvents = events.filter((e: CalendarEvent) => e.id !== eventId);
+        localStorage.setItem('fitlife_events', JSON.stringify(newEvents));
+    }
+
+    if (isCloudEnabled() && auth.currentUser) {
+        try {
+            await deleteDoc(doc(db, `users/${auth.currentUser.uid}/events`, eventId));
+        } catch (e) {
+            console.error("Cloud delete event error", e);
         }
     }
 };

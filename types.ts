@@ -54,6 +54,15 @@ export interface ScheduledWorkout {
   completed: boolean;
 }
 
+export interface CalendarEvent {
+  id: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  title: string;
+  type: 'ACTIVITY' | 'MEAL' | 'WORKOUT' | 'OTHER';
+  description?: string;
+}
+
 export interface MacroData {
   name: string;
   value: number;
@@ -92,6 +101,12 @@ export interface UserProfile {
   activityLevel: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
   goal: 'lose_weight' | 'maintain' | 'gain_muscle';
   avatar?: string; // Base64 image string
+  
+  // AI Configuration
+  aiProvider?: 'google' | 'openai'; // google (Gemini) or openai (Standard/DeepSeek)
+  openaiApiKey?: string;
+  openaiBaseUrl?: string; // e.g., https://api.deepseek.com or https://api.openai.com/v1
+  openaiModel?: string; // e.g., deepseek-chat or gpt-4o-mini
 }
 
 export type EquipmentType = '固定器械' | '啞鈴' | '徒手';

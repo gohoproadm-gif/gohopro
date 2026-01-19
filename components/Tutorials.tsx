@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { X, Zap, Search, Filter, Dumbbell, Sparkles, Loader2, RotateCcw, ChevronRight, BarChart2, Info, ArrowLeft, LayoutGrid, Activity, PlayCircle, Image as ImageIcon, PenTool, WifiOff, AlertTriangle, Video, Film } from 'lucide-react';
-import { Tutorial, BodyPart, EquipmentType } from '../types';
+import { X, Zap, Search, Filter, Dumbbell, Sparkles, Loader2, RotateCcw, ChevronRight, BarChart2, Info, ArrowLeft, LayoutGrid, Activity, PlayCircle, Image as ImageIcon, PenTool, WifiOff, AlertTriangle, Video, Film, Youtube } from 'lucide-react';
+import { Tutorial, BodyPart, EquipmentType, UserProfile } from '../types';
 import { TUTORIALS_DATA } from '../constants';
 
 interface BodyMapProps {
@@ -89,8 +89,11 @@ const BodyMap: React.FC<BodyMapProps> = ({ selectedPart, onSelect, view, toggleV
   );
 };
 
+interface TutorialsProps {
+    userProfile: UserProfile;
+}
 
-const Tutorials: React.FC = () => {
+const Tutorials: React.FC<TutorialsProps> = ({ userProfile }) => {
   const [selectedTutorial, setSelectedTutorial] = useState<Tutorial | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEquipment, setSelectedEquipment] = useState<EquipmentType | '全部'>('全部');
@@ -194,11 +197,12 @@ const Tutorials: React.FC = () => {
     
     const accentColor = colors[tutorial.bodyPart] || '#9ca3af';
     
+    // Updated placeholder text to direct user to actions
     const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 250" style="background-color: #f8fafc;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" style="background-color: #f8fafc;">
         <rect width="100%" height="100%" fill="white" />
-        <text x="100" y="125" font-family="sans-serif" font-size="20" fill="${accentColor}" text-anchor="middle">${tutorial.name}</text>
-        <text x="100" y="150" font-family="sans-serif" font-size="12" fill="#999" text-anchor="middle">Click AI Button to Generate</text>
+        <text x="200" y="140" font-family="sans-serif" font-weight="bold" font-size="24" fill="${accentColor}" text-anchor="middle">${tutorial.name}</text>
+        <text x="200" y="180" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">請選擇下方功能獲取示範</text>
       </svg>
     `;
     return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
@@ -226,41 +230,75 @@ const Tutorials: React.FC = () => {
     return null;
   };
 
+  const handleYoutubeSearch = (tutorial: Tutorial) => {
+    const query = encodeURIComponent(`${tutorial.name} 訓練教學 correct form`);
+    window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
+  };
+
   // --- AI Image Generation (High Quality 3D) ---
   const handleGenerateImage = async (tutorial: Tutorial) => {
     setIsGeneratingImage(true);
     setAiError(null);
     setActiveTab('IMAGE');
 
-    const apiKey = getApiKey();
+    const prompt = `Hyper-realistic 3D anatomical fitness illustration of "${tutorial.name}". 
+                    Show a fit character performing the exercise with perfect form. 
+                    Highlight the ${tutorial.bodyPart} muscles glowing slightly to show engagement.
+                    Clean, professional studio lighting, 8k resolution, cinematic composition, white background. 
+                    Style: Medical anatomy meets high-end fitness magazine.`;
 
-    if (!apiKey) {
-        setAiError("系統未偵測到 API Key。");
-        setIsGeneratingImage(false);
-        return;
-    }
-    
     try {
-        const ai = new GoogleGenAI({ apiKey: apiKey });
-        // Enhanced Prompt for "Exquisite" results
-        const prompt = `Hyper-realistic 3D anatomical fitness illustration of "${tutorial.name}". 
-                        Show a fit character performing the exercise with perfect form. 
-                        Highlight the ${tutorial.bodyPart} muscles glowing slightly to show engagement.
-                        Clean, professional studio lighting, 8k resolution, cinematic composition, white background. 
-                        Style: Medical anatomy meets high-end fitness magazine.`;
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-image-preview',
-            contents: { parts: [{ text: prompt }] },
-            config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" } }
-        });
-
         let imageUrl = '';
-        if (response.candidates?.[0]?.content?.parts) {
-            for (const part of response.candidates[0].content.parts) {
-                if (part.inlineData) {
-                    imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                    break;
+
+        if (userProfile.aiProvider === 'openai') {
+            const apiKey = userProfile.openaiApiKey;
+            if (!apiKey) throw new Error("請至「設定」輸入 OpenAI API Key");
+            
+            // Note: DeepSeek does not support DALL-E endpoints usually. This assumes standard OpenAI base URL.
+            // If user uses DeepSeek Base URL, this call will fail naturally, and we catch it.
+            const response = await fetch('https://api.openai.com/v1/images/generations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: "dall-e-3",
+                    prompt: prompt,
+                    n: 1,
+                    size: "1024x1024"
+                })
+            });
+
+            if(!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || "OpenAI 繪圖請求失敗");
+            }
+            
+            const data = await response.json();
+            imageUrl = data.data[0].url;
+
+        } else {
+            // Default Google Gemini
+            const apiKey = getApiKey();
+            if (!apiKey) {
+                setAiError("系統未偵測到 API Key。");
+                setIsGeneratingImage(false);
+                return;
+            }
+            const ai = new GoogleGenAI({ apiKey: apiKey });
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image',
+                contents: { parts: [{ text: prompt }] },
+                config: { imageConfig: { aspectRatio: "1:1" } }
+            });
+
+            if (response.candidates?.[0]?.content?.parts) {
+                for (const part of response.candidates[0].content.parts) {
+                    if (part.inlineData) {
+                        imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                        break;
+                    }
                 }
             }
         }
@@ -274,7 +312,7 @@ const Tutorials: React.FC = () => {
 
     } catch (error: any) {
         console.error("Failed to generate image:", error);
-        setAiError("圖片生成失敗，請稍後再試。");
+        setAiError("圖片生成失敗 (" + (userProfile.aiProvider === 'openai' ? 'OpenAI' : 'Gemini') + ")，請試試 YouTube 搜尋。");
     } finally {
         setIsGeneratingImage(false);
     }
@@ -282,6 +320,12 @@ const Tutorials: React.FC = () => {
 
   // --- AI Video Generation (Veo) ---
   const handleGenerateVideo = async (tutorial: Tutorial) => {
+      // Force restriction: Video is only supported by Gemini Veo
+      if (userProfile.aiProvider === 'openai') {
+          setAiError("AI 影片生成目前僅支援 Google Gemini 模型。請至設定切換或使用 YouTube。");
+          return;
+      }
+
       setIsGeneratingVideo(true);
       setAiError(null);
       setActiveTab('VIDEO');
@@ -306,7 +350,7 @@ const Tutorials: React.FC = () => {
               config: {
                   numberOfVideos: 1,
                   resolution: '720p',
-                  aspectRatio: '1:1'
+                  aspectRatio: '16:9'
               }
           });
 
@@ -338,9 +382,9 @@ const Tutorials: React.FC = () => {
       } catch (error: any) {
           console.error("Failed to generate video:", error);
           if (error.message?.includes("403") || error.message?.includes("billing")) {
-               setAiError("影片生成需要 Google Cloud 付費專案 (Veo Model)。請嘗試生成圖片。");
+               setAiError("影片生成需要付費專案。請改用 YouTube 搜尋。");
           } else {
-               setAiError("影片生成失敗: " + (error.message || "未知錯誤"));
+               setAiError("影片生成失敗。請改用 YouTube 搜尋。");
           }
           setActiveTab('IMAGE');
       } finally {
@@ -507,11 +551,11 @@ const Tutorials: React.FC = () => {
                             </div>
                     )}
                     
-                    <div className="flex items-center gap-2 pointer-events-auto">
+                    <div className="flex flex-wrap justify-center items-center gap-2 pointer-events-auto px-2">
                         <button 
                             onClick={(e) => { e.stopPropagation(); handleGenerateImage(selectedTutorial); }}
                             disabled={isGeneratingImage || isGeneratingVideo}
-                            className={`bg-white dark:bg-charcoal-900 text-charcoal-900 dark:text-white px-4 py-2 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 text-xs border border-gray-200 dark:border-charcoal-600 ${activeTab === 'IMAGE' ? 'ring-2 ring-neon-blue' : 'opacity-80 hover:opacity-100'}`}
+                            className={`bg-white dark:bg-charcoal-900 text-charcoal-900 dark:text-white px-3 py-2 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 text-xs border border-gray-200 dark:border-charcoal-600 ${activeTab === 'IMAGE' ? 'ring-2 ring-neon-blue' : 'opacity-80 hover:opacity-100'}`}
                         >
                             {isGeneratingImage ? <Loader2 className="animate-spin" size={14} /> : <ImageIcon size={14} />}
                             3D 圖解
@@ -520,10 +564,18 @@ const Tutorials: React.FC = () => {
                         <button 
                             onClick={(e) => { e.stopPropagation(); handleGenerateVideo(selectedTutorial); }}
                             disabled={isGeneratingImage || isGeneratingVideo}
-                            className={`bg-neon-blue hover:bg-cyan-400 text-charcoal-900 px-4 py-2 rounded-full font-bold shadow-lg shadow-neon-blue/20 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 text-xs ${activeTab === 'VIDEO' ? 'ring-2 ring-white' : ''}`}
+                            className={`bg-charcoal-900 dark:bg-charcoal-700 text-white px-3 py-2 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 text-xs ${activeTab === 'VIDEO' ? 'ring-2 ring-white' : 'opacity-80 hover:opacity-100'}`}
                         >
                              {isGeneratingVideo ? <Loader2 className="animate-spin" size={14} /> : <Video size={14} />}
-                             AI 影片生成
+                             AI 影片
+                        </button>
+
+                         <button 
+                            onClick={(e) => { e.stopPropagation(); handleYoutubeSearch(selectedTutorial); }}
+                            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 text-xs"
+                        >
+                             <Youtube size={16} />
+                             YouTube 示範
                         </button>
                     </div>
                 </div>

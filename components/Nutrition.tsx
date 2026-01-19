@@ -3,15 +3,16 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Plus, Sparkles, Loader2, X, Check, Utensils, Flame, ChevronLeft, ChevronRight, Calendar, Pencil, Trash2, Save, RefreshCw, AlertTriangle } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { NutritionLog } from '../types';
+import { NutritionLog, UserProfile } from '../types';
 import { apiSaveNutritionLog, apiDeleteNutritionLog } from '../lib/db';
 
 interface NutritionProps {
   logs: NutritionLog[];
   setLogs: React.Dispatch<React.SetStateAction<NutritionLog[]>>;
+  userProfile: UserProfile;
 }
 
-const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
+const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
@@ -66,14 +67,12 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
   // Robust API Key Retrieval
   const getApiKey = () => {
     try {
-        // Check standard process.env (Next.js / CRA / Custom)
         if (typeof process !== 'undefined' && process.env) {
             if (process.env.API_KEY) return process.env.API_KEY;
             if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
             if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
             if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
         }
-        // Check Vite specific import.meta.env
         // @ts-ignore
         if (typeof import.meta !== 'undefined' && import.meta.env) {
             // @ts-ignore
@@ -87,24 +86,53 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
     return null;
   };
 
-  const handleAnalyzeFood = async () => {
-    if (!foodInput.trim()) return;
-    setAiError(null);
+  const callOpenAI = async () => {
+      const apiKey = userProfile.openaiApiKey;
+      const baseUrl = userProfile.openaiBaseUrl || "https://api.openai.com/v1";
+      const model = userProfile.openaiModel || "gpt-4o-mini";
 
-    const apiKey = getApiKey();
+      if (!apiKey) throw new Error("請先至「設定」頁面輸入 OpenAI API Key");
 
-    // Environment Check
-    if (!apiKey) {
-        setAiError("系統未偵測到 API Key。請在 Vercel 環境變數中設定 'VITE_API_KEY' 或 'NEXT_PUBLIC_API_KEY' 並重新部署。");
-        return;
-    }
+      const prompt = `Estimate the nutritional values for: "${foodInput}". 
+                       If the input is vague, make a reasonable standard estimation.
+                       Return strictly valid JSON with this structure:
+                       {
+                          "item_name": "A short, clean name for the food (Traditional Chinese)",
+                          "calories": 500,
+                          "protein": 20,
+                          "carbs": 50,
+                          "fat": 15
+                       }`;
 
-    setIsAnalyzing(true);
+      const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+              model: model,
+              messages: [{ role: 'user', content: prompt }],
+              response_format: { type: 'json_object' }
+          })
+      });
 
-    try {
-        const ai = new GoogleGenAI({ apiKey: apiKey });
-        
-        const response = await ai.models.generateContent({
+      if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error?.message || "OpenAI API 請求失敗");
+      }
+
+      const data = await response.json();
+      const content = data.choices[0].message.content;
+      return JSON.parse(content);
+  };
+
+  const callGemini = async () => {
+      const apiKey = getApiKey();
+      if (!apiKey) throw new Error("系統未偵測到 Google API Key。");
+
+      const ai = new GoogleGenAI({ apiKey: apiKey });
+      const response = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
             contents: `Estimate the nutritional values for: "${foodInput}". 
                        If the input is vague, make a reasonable standard estimation.
@@ -124,9 +152,23 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
                 }
             }
         });
+      return JSON.parse(response.text || "{}");
+  };
 
-        const result = JSON.parse(response.text || "{}");
-        
+  const handleAnalyzeFood = async () => {
+    if (!foodInput.trim()) return;
+    setAiError(null);
+    setIsAnalyzing(true);
+
+    try {
+        let result;
+        if (userProfile.aiProvider === 'openai') {
+            result = await callOpenAI();
+        } else {
+            // Default to Gemini
+            result = await callGemini();
+        }
+
         if (result) {
             setFormData({
                 item: result.item_name,
@@ -369,7 +411,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
                   <div className="p-4 border-b border-gray-200 dark:border-charcoal-700 flex justify-between items-center bg-gray-50 dark:bg-charcoal-900 shrink-0">
                       <h3 className="font-bold text-lg flex items-center gap-2">
                           {editId ? <Pencil className="text-neon-blue" size={20} /> : <Sparkles className="text-cta-orange" size={20} />}
-                          {editId ? '編輯記錄' : (formStep === 'RESULT' ? '確認內容' : 'AI 飲食分析')}
+                          {editId ? '編輯記錄' : (formStep === 'RESULT' ? '確認內容' : `AI 飲食分析 (${userProfile.aiProvider === 'openai' ? 'OpenAI/DeepSeek' : 'Gemini'})`)}
                       </h3>
                       <button onClick={handleCloseModal} className="text-gray-500 hover:text-gray-800 dark:hover:text-white p-1">
                           <X size={24} />

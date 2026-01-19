@@ -173,6 +173,8 @@ const App: React.FC = () => {
             autoStart={autoStartWorkout} 
             onAutoStartConsumed={() => setAutoStartWorkout(false)} 
             onFinishWorkout={handleFinishWorkout}
+            historyLogs={historyLogs} 
+            userProfile={userProfile!} // Pass profile
           />
         );
       case View.PROGRESS:
@@ -182,10 +184,11 @@ const App: React.FC = () => {
           <Nutrition 
             logs={nutritionLogs}
             setLogs={setNutritionLogs}
+            userProfile={userProfile!} // Pass profile
           />
         );
       case View.TUTORIALS:
-        return <Tutorials />;
+        return <Tutorials userProfile={userProfile!} />; // Pass profile
       case View.SETTINGS:
           return (
             <ProfileSettings 
