@@ -63,20 +63,46 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs }) => {
     }
   }, [formStep]);
 
+  // Robust API Key Retrieval
+  const getApiKey = () => {
+    try {
+        // Check standard process.env (Next.js / CRA / Custom)
+        if (typeof process !== 'undefined' && process.env) {
+            if (process.env.API_KEY) return process.env.API_KEY;
+            if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
+            if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
+            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+        }
+        // Check Vite specific import.meta.env
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            // @ts-ignore
+            if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+            // @ts-ignore
+            if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+        }
+    } catch (e) {
+        console.warn("Error reading env vars", e);
+    }
+    return null;
+  };
+
   const handleAnalyzeFood = async () => {
     if (!foodInput.trim()) return;
     setAiError(null);
 
+    const apiKey = getApiKey();
+
     // Environment Check
-    if (!process.env.API_KEY) {
-        setAiError("系統未設定 API Key。請確認 Vercel 環境變數 API_KEY 已設定並重新部署。");
+    if (!apiKey) {
+        setAiError("系統未偵測到 API Key。請在 Vercel 環境變數中設定 'VITE_API_KEY' 或 'NEXT_PUBLIC_API_KEY' 並重新部署。");
         return;
     }
 
     setIsAnalyzing(true);
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: apiKey });
         
         const response = await ai.models.generateContent({
             model: "gemini-3-flash-preview",

@@ -154,18 +154,42 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       setMode('CALENDAR');
   };
 
+  // Robust API Key Retrieval
+  const getApiKey = () => {
+    try {
+        if (typeof process !== 'undefined' && process.env) {
+            if (process.env.API_KEY) return process.env.API_KEY;
+            if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
+            if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
+            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+        }
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            // @ts-ignore
+            if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+            // @ts-ignore
+            if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+        }
+    } catch (e) {
+        console.warn("Error reading env vars", e);
+    }
+    return null;
+  };
+
   const handleGeneratePlan = async () => {
       if (!aiPrompt.trim()) return;
       setAiError(null);
 
-      if (!process.env.API_KEY) {
-          setAiError("系統未設定 API Key。請確認 Vercel 環境變數 API_KEY 已設定並重新部署。");
+      const apiKey = getApiKey();
+
+      if (!apiKey) {
+          setAiError("系統未偵測到 API Key。請在 Vercel 環境變數中設定 'VITE_API_KEY' 並重新部署。");
           return;
       }
 
       setIsGenerating(true);
       try {
-          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const ai = new GoogleGenAI({ apiKey: apiKey });
           const response = await ai.models.generateContent({
               model: 'gemini-3-flash-preview',
               contents: `Create a workout plan based on this request: "${aiPrompt}".

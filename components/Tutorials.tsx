@@ -204,20 +204,44 @@ const Tutorials: React.FC = () => {
     return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
   };
 
+  // Robust API Key Retrieval
+  const getApiKey = () => {
+    try {
+        if (typeof process !== 'undefined' && process.env) {
+            if (process.env.API_KEY) return process.env.API_KEY;
+            if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
+            if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
+            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+        }
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            // @ts-ignore
+            if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+            // @ts-ignore
+            if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+        }
+    } catch (e) {
+        console.warn("Error reading env vars", e);
+    }
+    return null;
+  };
+
   // --- AI Image Generation (High Quality 3D) ---
   const handleGenerateImage = async (tutorial: Tutorial) => {
     setIsGeneratingImage(true);
     setAiError(null);
     setActiveTab('IMAGE');
 
-    if (!process.env.API_KEY) {
-        setAiError("系統未設定 API Key。");
+    const apiKey = getApiKey();
+
+    if (!apiKey) {
+        setAiError("系統未偵測到 API Key。");
         setIsGeneratingImage(false);
         return;
     }
     
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: apiKey });
         // Enhanced Prompt for "Exquisite" results
         const prompt = `Hyper-realistic 3D anatomical fitness illustration of "${tutorial.name}". 
                         Show a fit character performing the exercise with perfect form. 
@@ -262,14 +286,16 @@ const Tutorials: React.FC = () => {
       setAiError(null);
       setActiveTab('VIDEO');
 
-      if (!process.env.API_KEY) {
-          setAiError("系統未設定 API Key。");
+      const apiKey = getApiKey();
+
+      if (!apiKey) {
+          setAiError("系統未偵測到 API Key。");
           setIsGeneratingVideo(false);
           return;
       }
 
       try {
-          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const ai = new GoogleGenAI({ apiKey: apiKey });
           const prompt = `Cinematic video of a fitness trainer demonstrating the ${tutorial.name} exercise with perfect form. 
                           Medium shot, professional gym studio background with soft lighting. 
                           High resolution, realistic movement, 4k.`;
@@ -299,7 +325,7 @@ const Tutorials: React.FC = () => {
           
           if (downloadLink) {
               // Fetch the actual video bytes using the key
-              const videoRes = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+              const videoRes = await fetch(`${downloadLink}&key=${apiKey}`);
               const videoBlob = await videoRes.blob();
               const videoUrl = URL.createObjectURL(videoBlob);
               
