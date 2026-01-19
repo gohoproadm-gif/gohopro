@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Plus, Sparkles, Loader2, X, Check, Utensils, Flame, ChevronLeft, ChevronRight, Calendar, Pencil, Trash2, Save, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Plus, Sparkles, Loader2, X, Check, Utensils, Flame, ChevronLeft, ChevronRight, Calendar, Pencil, Trash2, Save, RefreshCw, AlertTriangle, Settings } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { NutritionLog, UserProfile } from '../types';
 import { apiSaveNutritionLog, apiDeleteNutritionLog } from '../lib/db';
@@ -10,9 +10,10 @@ interface NutritionProps {
   logs: NutritionLog[];
   setLogs: React.Dispatch<React.SetStateAction<NutritionLog[]>>;
   userProfile: UserProfile;
+  onGoToSettings: () => void;
 }
 
-const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile }) => {
+const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoToSettings }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
@@ -91,7 +92,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile }) => 
       const baseUrl = userProfile.openaiBaseUrl || "https://api.openai.com/v1";
       const model = userProfile.openaiModel || "gpt-4o-mini";
 
-      if (!apiKey) throw new Error("請先至「設定」頁面輸入 OpenAI API Key");
+      if (!apiKey) throw new Error("API Key"); // Special error string for handling
 
       const prompt = `Estimate the nutritional values for: "${foodInput}". 
                        If the input is vague, make a reasonable standard estimation.
@@ -181,7 +182,11 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile }) => 
         }
     } catch (error: any) {
         console.error("Analysis failed", error);
-        setAiError("AI 分析失敗: " + (error.message || "請稍後再試"));
+        if (error.message === "API Key") {
+             setAiError("AI 分析失敗: 請先至「設定」頁面輸入 API Key");
+        } else {
+             setAiError("AI 分析失敗: " + (error.message || "請稍後再試"));
+        }
     } finally {
         setIsAnalyzing(false);
     }
@@ -449,9 +454,22 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile }) => 
                               </div>
 
                               {aiError && (
-                                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-2 text-red-500 text-xs animate-fade-in">
-                                    <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                                    <span className="break-words leading-relaxed">{aiError}</span>
+                                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex flex-col items-start gap-2 text-red-500 text-xs animate-fade-in w-full">
+                                    <div className="flex items-center gap-2">
+                                        <AlertTriangle size={16} className="shrink-0" />
+                                        <span className="break-words leading-relaxed font-bold">{aiError}</span>
+                                    </div>
+                                    {aiError.includes("API Key") && (
+                                        <button 
+                                            onClick={() => {
+                                                handleCloseModal();
+                                                onGoToSettings();
+                                            }}
+                                            className="ml-6 text-xs bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors font-bold mt-1"
+                                        >
+                                            <Settings size={12} /> 前往設定
+                                        </button>
+                                    )}
                                 </div>
                               )}
                               

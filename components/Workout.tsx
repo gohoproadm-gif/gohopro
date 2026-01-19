@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { DEFAULT_PLANS, HK_HOLIDAYS } from '../constants';
 import { DailyPlan, ScheduledWorkout, WorkoutRecord, ExerciseSetLog, CalendarEvent, NutritionLog, UserProfile } from '../types';
-import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight } from 'lucide-react';
+import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { apiGetSchedule, apiSaveSchedule, apiGetEvents, apiSaveEvent, apiDeleteEvent, apiGetNutritionLogs } from '../lib/db';
 
@@ -14,6 +14,7 @@ interface WorkoutProps {
   onFinishWorkout?: (record: WorkoutRecord) => void;
   historyLogs?: WorkoutRecord[]; 
   userProfile: UserProfile;
+  onGoToSettings: () => void;
 }
 
 const playBeep = (count: number = 1) => {
@@ -51,7 +52,7 @@ const playBeep = (count: number = 1) => {
     }
 };
 
-const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFinishWorkout, historyLogs = [], userProfile }) => {
+const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFinishWorkout, historyLogs = [], userProfile, onGoToSettings }) => {
   const [mode, setMode] = useState<Mode>('TIMETABLE');
   const [schedule, setSchedule] = useState<ScheduledWorkout[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -230,7 +231,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
         const baseUrl = userProfile.openaiBaseUrl || "https://api.openai.com/v1";
         const model = userProfile.openaiModel || "gpt-4o-mini";
 
-        if (!apiKey) throw new Error("請先至「設定」頁面輸入 OpenAI API Key");
+        if (!apiKey) throw new Error("API Key");
 
         const systemPrompt = `Create a workout plan based on the request. Return strictly valid JSON with structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12" } ] }`;
 
@@ -307,7 +308,11 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
               setMode('TIMETABLE');
           }
       } catch (e: any) {
-          setAiError("生成失敗: " + (e.message || "未知錯誤"));
+          if (e.message === "API Key") {
+               setAiError("生成失敗: 請先至「設定」頁面輸入 API Key");
+          } else {
+               setAiError("生成失敗: " + (e.message || "未知錯誤"));
+          }
       } finally {
           setIsGenerating(false);
       }
@@ -673,7 +678,22 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                         使用模型: <span className="font-bold">{userProfile.aiProvider === 'openai' ? 'OpenAI/DeepSeek' : 'Google Gemini'}</span>
                     </div>
                     <textarea value={aiPrompt} onChange={(e) => { setAiPrompt(e.target.value); setAiError(null); }} placeholder="例如：我只有30分鐘，想練胸肌和三頭肌..." className="w-full h-32 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange resize-none" />
-                    {aiError && <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 text-xs rounded-lg flex items-center gap-2"><AlertTriangle size={14} /> {aiError}</div>}
+                    {aiError && (
+                        <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 text-xs rounded-lg flex flex-col items-start gap-2 w-full">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangle size={14} className="shrink-0" />
+                                <span>{aiError}</span>
+                            </div>
+                            {aiError.includes("API Key") && (
+                                <button 
+                                    onClick={onGoToSettings}
+                                    className="ml-5 text-xs bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors font-bold"
+                                >
+                                    <Settings size={12} /> 前往設定
+                                </button>
+                            )}
+                        </div>
+                    )}
                     <button onClick={handleGeneratePlan} disabled={isGenerating || !aiPrompt.trim()} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">{isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}{isGenerating ? 'AI 思考中...' : '生成課表'}</button>
                 </div>
             </div>

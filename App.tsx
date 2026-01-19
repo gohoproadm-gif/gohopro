@@ -119,6 +119,10 @@ const App: React.FC = () => {
       setCurrentView(View.HISTORY);
   };
 
+  const handleGoToSettings = () => {
+      setCurrentView(View.SETTINGS);
+  };
+
   // --- RENDER FLOW ---
 
   // 1. Loading Auth State
@@ -174,7 +178,8 @@ const App: React.FC = () => {
             onAutoStartConsumed={() => setAutoStartWorkout(false)} 
             onFinishWorkout={handleFinishWorkout}
             historyLogs={historyLogs} 
-            userProfile={userProfile!} // Pass profile
+            userProfile={userProfile!} 
+            onGoToSettings={handleGoToSettings}
           />
         );
       case View.PROGRESS:
@@ -184,11 +189,12 @@ const App: React.FC = () => {
           <Nutrition 
             logs={nutritionLogs}
             setLogs={setNutritionLogs}
-            userProfile={userProfile!} // Pass profile
+            userProfile={userProfile!} 
+            onGoToSettings={handleGoToSettings}
           />
         );
       case View.TUTORIALS:
-        return <Tutorials userProfile={userProfile!} />; // Pass profile
+        return <Tutorials userProfile={userProfile!} onGoToSettings={handleGoToSettings} />;
       case View.SETTINGS:
           return (
             <ProfileSettings 

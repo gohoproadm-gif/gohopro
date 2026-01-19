@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { X, Zap, Search, Filter, Dumbbell, Sparkles, Loader2, RotateCcw, ChevronRight, BarChart2, Info, ArrowLeft, LayoutGrid, Activity, PlayCircle, Image as ImageIcon, PenTool, WifiOff, AlertTriangle, Video, Film, Youtube } from 'lucide-react';
+import { X, Zap, Search, Filter, Dumbbell, Sparkles, Loader2, RotateCcw, ChevronRight, BarChart2, Info, ArrowLeft, LayoutGrid, Activity, PlayCircle, Image as ImageIcon, PenTool, WifiOff, AlertTriangle, Video, Film, Youtube, Settings } from 'lucide-react';
 import { Tutorial, BodyPart, EquipmentType, UserProfile } from '../types';
 import { TUTORIALS_DATA } from '../constants';
 
@@ -91,9 +91,10 @@ const BodyMap: React.FC<BodyMapProps> = ({ selectedPart, onSelect, view, toggleV
 
 interface TutorialsProps {
     userProfile: UserProfile;
+    onGoToSettings: () => void;
 }
 
-const Tutorials: React.FC<TutorialsProps> = ({ userProfile }) => {
+const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) => {
   const [selectedTutorial, setSelectedTutorial] = useState<Tutorial | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEquipment, setSelectedEquipment] = useState<EquipmentType | '全部'>('全部');
@@ -547,7 +548,18 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile }) => {
                 <div className="absolute inset-x-0 bottom-4 flex flex-col items-center justify-center z-20 pointer-events-none gap-2">
                     {aiError && (
                             <div className="bg-red-500/90 text-white text-xs px-3 py-1 rounded-full mb-1 flex flex-col items-center gap-1 shadow-lg pointer-events-auto max-w-[90%] text-center">
-                            <div className="flex items-center gap-1"><AlertTriangle size={12}/> {aiError}</div>
+                                <div className="flex items-center gap-1"><AlertTriangle size={12}/> {aiError}</div>
+                                {aiError.includes("API Key") && (
+                                    <button 
+                                        onClick={() => {
+                                            onGoToSettings();
+                                            setSelectedTutorial(null);
+                                        }}
+                                        className="text-[10px] bg-white/20 text-white hover:bg-white/30 px-2 py-0.5 rounded flex items-center gap-1 mt-0.5"
+                                    >
+                                        <Settings size={10} /> 前往設定
+                                    </button>
+                                )}
                             </div>
                     )}
                     
