@@ -207,18 +207,14 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
 
   const getApiKey = () => {
     try {
-        if (typeof process !== 'undefined' && process.env) {
-            if (process.env.API_KEY) return process.env.API_KEY;
-            if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
-            if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
-            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
-        }
         // @ts-ignore
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
             // @ts-ignore
-            if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
-            // @ts-ignore
-            if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+            return import.meta.env.VITE_API_KEY;
+        }
+        if (typeof process !== 'undefined' && process.env) {
+            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+            if (process.env.API_KEY) return process.env.API_KEY;
         }
     } catch (e) {
         console.warn("Error reading env vars", e);
@@ -226,12 +222,43 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
     return null;
   };
 
-  const callOpenAI = async () => {
-        const apiKey = userProfile.openaiApiKey;
-        const baseUrl = userProfile.openaiBaseUrl || "https://api.openai.com/v1";
-        const model = userProfile.openaiModel || "gpt-4o-mini";
+  // Robust DeepSeek/OpenAI Key Retrieval
+  const getDeepSeekConfig = () => {
+      let apiKey = userProfile.openaiApiKey;
+      let baseUrl = userProfile.openaiBaseUrl;
+      let model = userProfile.openaiModel;
 
-        if (!apiKey) throw new Error("API Key");
+      // Try VITE_ env vars (most likely for this project)
+      try {
+          // @ts-ignore
+          if (typeof import.meta !== 'undefined' && import.meta.env) {
+             // @ts-ignore
+             if (!apiKey) apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+             // @ts-ignore
+             if (!baseUrl) baseUrl = import.meta.env.VITE_OPENAI_BASE_URL;
+             // @ts-ignore
+             if (!model) model = import.meta.env.VITE_OPENAI_MODEL;
+          }
+      } catch(e) {}
+
+      // Try process.env as fallback
+      if (!apiKey && typeof process !== 'undefined' && process.env) {
+          apiKey = process.env.VITE_OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
+          baseUrl = baseUrl || process.env.VITE_OPENAI_BASE_URL || process.env.NEXT_PUBLIC_OPENAI_BASE_URL;
+          model = model || process.env.VITE_OPENAI_MODEL || process.env.NEXT_PUBLIC_OPENAI_MODEL;
+      }
+
+      return {
+          apiKey,
+          baseUrl: baseUrl || "https://api.deepseek.com",
+          model: model || "deepseek-chat"
+      };
+  };
+
+  const callOpenAI = async () => {
+        const { apiKey, baseUrl, model } = getDeepSeekConfig();
+
+        if (!apiKey) throw new Error("API Key 缺失。請聯繫管理員配置環境變數 (VITE_OPENAI_API_KEY)。");
 
         const systemPrompt = `Create a workout plan based on the request. Return strictly valid JSON with structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12" } ] }`;
 
@@ -253,7 +280,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
 
         if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.error?.message || "OpenAI API 請求失敗");
+            throw new Error(err.error?.message || "AI API 請求失敗");
         }
 
         const data = await response.json();
@@ -279,7 +306,10 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       setIsGenerating(true);
       try {
           let result;
-          if (userProfile.aiProvider === 'openai') {
+          const { apiKey } = getDeepSeekConfig();
+
+          // If DeepSeek/OpenAI key is present, use it. Otherwise fall back to Gemini.
+          if (userProfile.aiProvider === 'openai' || apiKey) {
                result = await callOpenAI();
           } else {
                result = await callGemini();
@@ -308,8 +338,8 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
               setMode('TIMETABLE');
           }
       } catch (e: any) {
-          if (e.message === "API Key") {
-               setAiError("生成失敗: 請先至「設定」頁面輸入 API Key");
+          if (e.message?.includes("API Key")) {
+               setAiError("生成失敗: API Key 缺失");
           } else {
                setAiError("生成失敗: " + (e.message || "未知錯誤"));
           }
@@ -675,7 +705,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                 </div>
                 <div className="space-y-4">
                     <div className="text-xs text-gray-500 bg-gray-100 dark:bg-charcoal-900 p-2 rounded">
-                        使用模型: <span className="font-bold">{userProfile.aiProvider === 'openai' ? 'OpenAI/DeepSeek' : 'Google Gemini'}</span>
+                        使用模型: <span className="font-bold">{userProfile.aiProvider === 'openai' || process.env.NEXT_PUBLIC_OPENAI_API_KEY ? 'DeepSeek/OpenAI' : 'Google Gemini'}</span>
                     </div>
                     <textarea value={aiPrompt} onChange={(e) => { setAiPrompt(e.target.value); setAiError(null); }} placeholder="例如：我只有30分鐘，想練胸肌和三頭肌..." className="w-full h-32 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange resize-none" />
                     {aiError && (
@@ -684,14 +714,6 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                                 <AlertTriangle size={14} className="shrink-0" />
                                 <span>{aiError}</span>
                             </div>
-                            {aiError.includes("API Key") && (
-                                <button 
-                                    onClick={onGoToSettings}
-                                    className="ml-5 text-xs bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors font-bold"
-                                >
-                                    <Settings size={12} /> 前往設定
-                                </button>
-                            )}
                         </div>
                     )}
                     <button onClick={handleGeneratePlan} disabled={isGenerating || !aiPrompt.trim()} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">{isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}{isGenerating ? 'AI 思考中...' : '生成課表'}</button>

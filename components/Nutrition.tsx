@@ -68,18 +68,14 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
   // Robust API Key Retrieval
   const getApiKey = () => {
     try {
-        if (typeof process !== 'undefined' && process.env) {
-            if (process.env.API_KEY) return process.env.API_KEY;
-            if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
-            if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
-            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
-        }
         // @ts-ignore
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
             // @ts-ignore
-            if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
-            // @ts-ignore
-            if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+            return import.meta.env.VITE_API_KEY;
+        }
+        if (typeof process !== 'undefined' && process.env) {
+            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+            if (process.env.API_KEY) return process.env.API_KEY;
         }
     } catch (e) {
         console.warn("Error reading env vars", e);
@@ -87,12 +83,43 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
     return null;
   };
 
-  const callOpenAI = async () => {
-      const apiKey = userProfile.openaiApiKey;
-      const baseUrl = userProfile.openaiBaseUrl || "https://api.openai.com/v1";
-      const model = userProfile.openaiModel || "gpt-4o-mini";
+  // Robust DeepSeek/OpenAI Key Retrieval
+  const getDeepSeekConfig = () => {
+      let apiKey = userProfile.openaiApiKey;
+      let baseUrl = userProfile.openaiBaseUrl;
+      let model = userProfile.openaiModel;
 
-      if (!apiKey) throw new Error("API Key"); // Special error string for handling
+      // Try VITE_ env vars (most likely for this project)
+      try {
+          // @ts-ignore
+          if (typeof import.meta !== 'undefined' && import.meta.env) {
+             // @ts-ignore
+             if (!apiKey) apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+             // @ts-ignore
+             if (!baseUrl) baseUrl = import.meta.env.VITE_OPENAI_BASE_URL;
+             // @ts-ignore
+             if (!model) model = import.meta.env.VITE_OPENAI_MODEL;
+          }
+      } catch(e) {}
+
+      // Try process.env as fallback
+      if (!apiKey && typeof process !== 'undefined' && process.env) {
+          apiKey = process.env.VITE_OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
+          baseUrl = baseUrl || process.env.VITE_OPENAI_BASE_URL || process.env.NEXT_PUBLIC_OPENAI_BASE_URL;
+          model = model || process.env.VITE_OPENAI_MODEL || process.env.NEXT_PUBLIC_OPENAI_MODEL;
+      }
+
+      return {
+          apiKey,
+          baseUrl: baseUrl || "https://api.deepseek.com",
+          model: model || "deepseek-chat"
+      };
+  };
+
+  const callOpenAI = async () => {
+      const { apiKey, baseUrl, model } = getDeepSeekConfig();
+
+      if (!apiKey) throw new Error("API Key 缺失。請聯繫管理員配置環境變數 (VITE_OPENAI_API_KEY)。");
 
       const prompt = `Estimate the nutritional values for: "${foodInput}". 
                        If the input is vague, make a reasonable standard estimation.
@@ -120,7 +147,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
 
       if (!response.ok) {
           const err = await response.json();
-          throw new Error(err.error?.message || "OpenAI API 請求失敗");
+          throw new Error(err.error?.message || "AI API 請求失敗");
       }
 
       const data = await response.json();
@@ -163,10 +190,12 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
 
     try {
         let result;
-        if (userProfile.aiProvider === 'openai') {
+        const { apiKey } = getDeepSeekConfig();
+        
+        // If DeepSeek/OpenAI key is present, use it. Otherwise fall back to Gemini.
+        if (userProfile.aiProvider === 'openai' || apiKey) {
             result = await callOpenAI();
         } else {
-            // Default to Gemini
             result = await callGemini();
         }
 
@@ -182,8 +211,8 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
         }
     } catch (error: any) {
         console.error("Analysis failed", error);
-        if (error.message === "API Key") {
-             setAiError("AI 分析失敗: 請先至「設定」頁面輸入 API Key");
+        if (error.message?.includes("API Key")) {
+             setAiError("AI 分析失敗: API Key 缺失");
         } else {
              setAiError("AI 分析失敗: " + (error.message || "請稍後再試"));
         }
@@ -416,7 +445,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                   <div className="p-4 border-b border-gray-200 dark:border-charcoal-700 flex justify-between items-center bg-gray-50 dark:bg-charcoal-900 shrink-0">
                       <h3 className="font-bold text-lg flex items-center gap-2">
                           {editId ? <Pencil className="text-neon-blue" size={20} /> : <Sparkles className="text-cta-orange" size={20} />}
-                          {editId ? '編輯記錄' : (formStep === 'RESULT' ? '確認內容' : `AI 飲食分析 (${userProfile.aiProvider === 'openai' ? 'OpenAI/DeepSeek' : 'Gemini'})`)}
+                          {editId ? '編輯記錄' : (formStep === 'RESULT' ? '確認內容' : `AI 飲食分析`)}
                       </h3>
                       <button onClick={handleCloseModal} className="text-gray-500 hover:text-gray-800 dark:hover:text-white p-1">
                           <X size={24} />
@@ -459,17 +488,6 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                                         <AlertTriangle size={16} className="shrink-0" />
                                         <span className="break-words leading-relaxed font-bold">{aiError}</span>
                                     </div>
-                                    {aiError.includes("API Key") && (
-                                        <button 
-                                            onClick={() => {
-                                                handleCloseModal();
-                                                onGoToSettings();
-                                            }}
-                                            className="ml-6 text-xs bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors font-bold mt-1"
-                                        >
-                                            <Settings size={12} /> 前往設定
-                                        </button>
-                                    )}
                                 </div>
                               )}
                               

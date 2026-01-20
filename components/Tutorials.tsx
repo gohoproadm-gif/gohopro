@@ -242,21 +242,24 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
     setAiError(null);
     setActiveTab('IMAGE');
 
-    const prompt = `Hyper-realistic 3D anatomical fitness illustration of "${tutorial.name}". 
-                    Show a fit character performing the exercise with perfect form. 
-                    Highlight the ${tutorial.bodyPart} muscles glowing slightly to show engagement.
-                    Clean, professional studio lighting, 8k resolution, cinematic composition, white background. 
-                    Style: Medical anatomy meets high-end fitness magazine.`;
+    // Updated Prompt to avoid Safety Filters
+    const prompt = `A high-quality 3D render of a fitness athlete performing the exercise "${tutorial.name}" with perfect form. 
+                    Focus on the ${tutorial.bodyPart} muscles.
+                    Cinematic lighting, 4k resolution, clean studio background. 
+                    Style: Realistic 3D character design, like a high-end sports game.`;
 
     try {
         let imageUrl = '';
 
         if (userProfile.aiProvider === 'openai') {
+            // Check for DeepSeek usage
+            if (userProfile.openaiBaseUrl?.includes('deepseek')) {
+                 throw new Error("DeepSeek 模型僅支援文字功能，無法生成圖片。請切換至 Google Gemini 或使用 YouTube 示範。");
+            }
+
             const apiKey = userProfile.openaiApiKey;
-            if (!apiKey) throw new Error("請至「設定」輸入 OpenAI API Key");
+            if (!apiKey) throw new Error("API Key");
             
-            // Note: DeepSeek does not support DALL-E endpoints usually. This assumes standard OpenAI base URL.
-            // If user uses DeepSeek Base URL, this call will fail naturally, and we catch it.
             const response = await fetch('https://api.openai.com/v1/images/generations', {
                 method: 'POST',
                 headers: {
@@ -313,7 +316,16 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
 
     } catch (error: any) {
         console.error("Failed to generate image:", error);
-        setAiError("圖片生成失敗 (" + (userProfile.aiProvider === 'openai' ? 'OpenAI' : 'Gemini') + ")，請試試 YouTube 搜尋。");
+        
+        if (error.message === "API Key") {
+             setAiError("API Key 缺失: 請先至「設定」頁面輸入");
+        } else if (error.message?.includes("Safety") || error.message?.includes("block")) {
+             setAiError("圖片生成被安全機制阻擋。請改用 YouTube 示範。");
+        } else if (error.message?.includes("DeepSeek")) {
+             setAiError(error.message);
+        } else {
+             setAiError("圖片生成失敗 (" + (userProfile.aiProvider === 'openai' ? 'OpenAI' : 'Gemini') + ")，請試試 YouTube 搜尋。");
+        }
     } finally {
         setIsGeneratingImage(false);
     }

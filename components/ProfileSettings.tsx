@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { Upload, User, Ruler, Weight, Activity, Target, Save, LogOut, Download, BrainCircuit, Key, Globe, Cpu, Zap } from 'lucide-react';
+import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download } from 'lucide-react';
 
 interface ProfileSettingsProps {
   userProfile: UserProfile;
@@ -56,14 +56,6 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
     onUpdateProfile(profile);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
-  };
-
-  const fillDeepSeekDefaults = () => {
-      setProfile({
-          ...profile,
-          openaiBaseUrl: 'https://api.deepseek.com',
-          openaiModel: 'deepseek-chat'
-      });
   };
 
   return (
@@ -176,95 +168,6 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                     ))}
                 </div>
             </div>
-        </div>
-
-        {/* AI Settings Section */}
-        <div className="space-y-6">
-             <div className="flex items-center justify-between border-b border-gray-100 dark:border-charcoal-700 pb-2">
-                <h3 className="text-lg font-bold flex items-center gap-2"><BrainCircuit size={20} className="text-neon-purple"/> AI 智慧設定</h3>
-                <span className="text-[10px] bg-gray-100 dark:bg-charcoal-700 px-2 py-1 rounded text-gray-500">進階功能</span>
-             </div>
-             
-             <div className="space-y-4">
-                 <div>
-                     <label className="block text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">AI 模型提供者</label>
-                     <div className="grid grid-cols-2 gap-4">
-                         <button 
-                             onClick={() => setProfile({...profile, aiProvider: 'google'})}
-                             className={`p-4 rounded-xl border-2 text-left transition-all ${
-                                 (!profile.aiProvider || profile.aiProvider === 'google')
-                                 ? 'border-neon-blue bg-blue-50 dark:bg-blue-900/10 text-neon-blue'
-                                 : 'border-gray-100 dark:border-charcoal-700 bg-gray-50 dark:bg-charcoal-900 text-gray-500'
-                             }`}
-                         >
-                             <span className="font-bold block mb-1">Google Gemini</span>
-                             <span className="text-xs opacity-70">預設建議。支援強大的圖解與影片生成。</span>
-                         </button>
-                         <button 
-                             onClick={() => setProfile({...profile, aiProvider: 'openai'})}
-                             className={`p-4 rounded-xl border-2 text-left transition-all ${
-                                 profile.aiProvider === 'openai'
-                                 ? 'border-neon-green bg-green-50 dark:bg-green-900/10 text-neon-green'
-                                 : 'border-gray-100 dark:border-charcoal-700 bg-gray-50 dark:bg-charcoal-900 text-gray-500'
-                             }`}
-                         >
-                             <span className="font-bold block mb-1">OpenAI / DeepSeek</span>
-                             <span className="text-xs opacity-70">自訂 API。適用於香港或習慣使用 DeepSeek 的用戶。</span>
-                         </button>
-                     </div>
-                 </div>
-
-                 {profile.aiProvider === 'openai' && (
-                     <div className="bg-gray-50 dark:bg-charcoal-900 p-4 rounded-xl space-y-4 border border-gray-100 dark:border-charcoal-700 animate-fade-in relative">
-                         <button 
-                             onClick={fillDeepSeekDefaults}
-                             className="absolute top-4 right-4 text-xs bg-neon-blue/10 text-neon-blue px-2 py-1 rounded-full font-bold hover:bg-neon-blue/20 transition-colors flex items-center gap-1"
-                         >
-                             <Zap size={10} /> DeepSeek 預設參數
-                         </button>
-                         <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
-                             <Globe size={12}/> 支援所有 OpenAI 相容介面 (如 DeepSeek, OpenRouter)
-                         </div>
-                         <div>
-                             <label className="flex items-center gap-2 text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">
-                                <Key size={14} /> API Key (必填)
-                             </label>
-                             <input 
-                                 type="password" 
-                                 placeholder="sk-..."
-                                 value={profile.openaiApiKey || ''}
-                                 onChange={(e) => setProfile({...profile, openaiApiKey: e.target.value})}
-                                 className="w-full p-2.5 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-600 outline-none focus:border-neon-green text-sm"
-                             />
-                             <p className="text-[10px] text-gray-400 mt-1">DeepSeek 用戶請至 <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer" className="underline text-neon-blue">platform.deepseek.com</a> 申請。</p>
-                         </div>
-                         <div>
-                             <label className="flex items-center gap-2 text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">
-                                <Globe size={14} /> Base URL (選填)
-                             </label>
-                             <input 
-                                 type="text" 
-                                 placeholder="https://api.openai.com/v1 (預設) 或 https://api.deepseek.com"
-                                 value={profile.openaiBaseUrl || ''}
-                                 onChange={(e) => setProfile({...profile, openaiBaseUrl: e.target.value})}
-                                 className="w-full p-2.5 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-600 outline-none focus:border-neon-green text-sm"
-                             />
-                         </div>
-                         <div>
-                             <label className="flex items-center gap-2 text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">
-                                <Cpu size={14} /> Model Name (選填)
-                             </label>
-                             <input 
-                                 type="text" 
-                                 placeholder="gpt-4o-mini (預設) 或 deepseek-chat"
-                                 value={profile.openaiModel || ''}
-                                 onChange={(e) => setProfile({...profile, openaiModel: e.target.value})}
-                                 className="w-full p-2.5 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-600 outline-none focus:border-neon-green text-sm"
-                             />
-                         </div>
-                     </div>
-                 )}
-             </div>
         </div>
 
         {/* Buttons */}
