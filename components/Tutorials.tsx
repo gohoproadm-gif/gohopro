@@ -212,18 +212,14 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
   // Robust API Key Retrieval
   const getApiKey = () => {
     try {
-        if (typeof process !== 'undefined' && process.env) {
-            if (process.env.API_KEY) return process.env.API_KEY;
-            if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
-            if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
-            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
-        }
         // @ts-ignore
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
             // @ts-ignore
-            if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
-            // @ts-ignore
-            if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+            return import.meta.env.VITE_API_KEY;
+        }
+        if (typeof process !== 'undefined' && process.env) {
+            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+            if (process.env.API_KEY) return process.env.API_KEY;
         }
     } catch (e) {
         console.warn("Error reading env vars", e);
@@ -286,23 +282,49 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
             // Default Google Gemini
             const apiKey = getApiKey();
             if (!apiKey) {
-                setAiError("系統未偵測到 API Key。");
+                setAiError("系統未偵測到 API Key (VITE_API_KEY)。");
                 setIsGeneratingImage(false);
                 return;
             }
             const ai = new GoogleGenAI({ apiKey: apiKey });
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image',
-                contents: { parts: [{ text: prompt }] },
-                config: { imageConfig: { aspectRatio: "1:1" } }
-            });
-
-            if (response.candidates?.[0]?.content?.parts) {
-                for (const part of response.candidates[0].content.parts) {
-                    if (part.inlineData) {
-                        imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                        break;
+            
+            // Use Imagen 3 for high-quality generation
+            try {
+                const response = await ai.models.generateImages({
+                    model: 'imagen-3.0-generate-001',
+                    prompt: prompt,
+                    config: {
+                        numberOfImages: 1,
+                        aspectRatio: '1:1',
+                        outputMimeType: 'image/jpeg',
                     }
+                });
+                
+                if (response.generatedImages?.[0]?.image?.imageBytes) {
+                    imageUrl = `data:image/jpeg;base64,${response.generatedImages[0].image.imageBytes}`;
+                }
+            } catch (innerError: any) {
+                console.warn("Imagen failed, trying Flash Image", innerError);
+                // Fallback to gemini-2.5-flash-image
+                // Note: gemini-2.5-flash-image generates images via generateContent, not generateImages
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash-image',
+                    contents: { parts: [{ text: prompt }] },
+                    // 2.5 flash image typically does not use imageConfig, just prompts
+                });
+
+                if (response.candidates?.[0]?.content?.parts) {
+                    for (const part of response.candidates[0].content.parts) {
+                        if (part.inlineData) {
+                            imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!imageUrl && innerError) {
+                    // If fallback also fails, throw the original error or a clearer one
+                    throw new Error(innerError.message || "圖片生成失敗");
                 }
             }
         }
@@ -311,20 +333,23 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
             setGeneratedImages(prev => ({ ...prev, [tutorial.id]: imageUrl }));
             setDisplayImage(imageUrl);
         } else {
-            throw new Error("No image generated");
+            throw new Error("無法生成圖片 (No data returned)");
         }
 
     } catch (error: any) {
         console.error("Failed to generate image:", error);
         
-        if (error.message === "API Key") {
+        // Show detailed error message
+        const msg = error.message || "未知錯誤";
+        
+        if (msg === "API Key") {
              setAiError("API Key 缺失: 請先至「設定」頁面輸入");
-        } else if (error.message?.includes("Safety") || error.message?.includes("block")) {
+        } else if (msg.includes("Safety") || msg.includes("block")) {
              setAiError("圖片生成被安全機制阻擋。請改用 YouTube 示範。");
-        } else if (error.message?.includes("DeepSeek")) {
-             setAiError(error.message);
+        } else if (msg.includes("DeepSeek")) {
+             setAiError(msg);
         } else {
-             setAiError("圖片生成失敗 (" + (userProfile.aiProvider === 'openai' ? 'OpenAI' : 'Gemini') + ")，請試試 YouTube 搜尋。");
+             setAiError(`生成失敗 (${userProfile.aiProvider === 'openai' ? 'OpenAI' : 'Gemini'}): ${msg}`);
         }
     } finally {
         setIsGeneratingImage(false);
