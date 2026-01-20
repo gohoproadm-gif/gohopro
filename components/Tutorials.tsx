@@ -288,52 +288,30 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
             }
             const ai = new GoogleGenAI({ apiKey: apiKey });
             
-            // Use Imagen 3 for high-quality generation
-            try {
-                const response = await ai.models.generateImages({
-                    model: 'imagen-3.0-generate-001',
-                    prompt: prompt,
-                    config: {
-                        numberOfImages: 1,
-                        aspectRatio: '1:1',
-                        outputMimeType: 'image/jpeg',
-                    }
-                });
-                
-                if (response.generatedImages?.[0]?.image?.imageBytes) {
-                    imageUrl = `data:image/jpeg;base64,${response.generatedImages[0].image.imageBytes}`;
-                }
-            } catch (innerError: any) {
-                console.warn("Imagen failed, trying Flash Image", innerError);
-                // Fallback to gemini-2.5-flash-image
-                // Note: gemini-2.5-flash-image generates images via generateContent, not generateImages
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash-image',
-                    contents: { parts: [{ text: prompt }] },
-                    // 2.5 flash image typically does not use imageConfig, just prompts
-                });
+            // Generate using gemini-2.5-flash-image (standard free tier model)
+            // It generates images via generateContent call structure.
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image',
+                contents: { parts: [{ text: prompt }] },
+            });
 
-                if (response.candidates?.[0]?.content?.parts) {
-                    for (const part of response.candidates[0].content.parts) {
-                        if (part.inlineData) {
-                            imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                            break;
-                        }
+            if (response.candidates?.[0]?.content?.parts) {
+                for (const part of response.candidates[0].content.parts) {
+                    if (part.inlineData) {
+                        imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                        break;
                     }
                 }
-                
-                if (!imageUrl && innerError) {
-                    // If fallback also fails, throw the original error or a clearer one
-                    throw new Error(innerError.message || "圖片生成失敗");
-                }
+            }
+            
+            if (!imageUrl) {
+                throw new Error("無法生成圖片 (No data returned)");
             }
         }
 
         if (imageUrl) {
             setGeneratedImages(prev => ({ ...prev, [tutorial.id]: imageUrl }));
             setDisplayImage(imageUrl);
-        } else {
-            throw new Error("無法生成圖片 (No data returned)");
         }
 
     } catch (error: any) {
@@ -344,12 +322,14 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
         
         if (msg === "API Key") {
              setAiError("API Key 缺失: 請先至「設定」頁面輸入");
+        } else if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("Quota")) {
+             setAiError("今日 AI 免費繪圖額度已滿，請稍後再試，或使用 YouTube。");
         } else if (msg.includes("Safety") || msg.includes("block")) {
              setAiError("圖片生成被安全機制阻擋。請改用 YouTube 示範。");
         } else if (msg.includes("DeepSeek")) {
              setAiError(msg);
         } else {
-             setAiError(`生成失敗 (${userProfile.aiProvider === 'openai' ? 'OpenAI' : 'Gemini'}): ${msg}`);
+             setAiError(`生成失敗: ${msg.substring(0, 50)}...`);
         }
     } finally {
         setIsGeneratingImage(false);

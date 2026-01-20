@@ -24,6 +24,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
   const [foodInput, setFoodInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [usedModel, setUsedModel] = useState<string>('');
   
   // Data for the form
   const [formData, setFormData] = useState({
@@ -119,7 +120,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
   const callOpenAI = async () => {
       const { apiKey, baseUrl, model } = getDeepSeekConfig();
 
-      if (!apiKey) throw new Error("API Key 缺失。請聯繫管理員配置環境變數 (VITE_OPENAI_API_KEY)。");
+      if (!apiKey) throw new Error("API Key 缺失");
 
       const prompt = `Estimate the nutritional values for: "${foodInput}". 
                        If the input is vague, make a reasonable standard estimation.
@@ -147,7 +148,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
 
       if (!response.ok) {
           const err = await response.json();
-          throw new Error(err.error?.message || "AI API 請求失敗");
+          throw new Error(err.error?.message || "OpenAI/DeepSeek API 請求失敗");
       }
 
       const data = await response.json();
@@ -187,19 +188,31 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
     if (!foodInput.trim()) return;
     setAiError(null);
     setIsAnalyzing(true);
+    setUsedModel('');
 
     try {
         let result;
         const { apiKey } = getDeepSeekConfig();
         
-        // If DeepSeek/OpenAI key is present, use it. Otherwise fall back to Gemini.
+        // Strategy: Try DeepSeek/OpenAI first if available, then fallback to Gemini
+        let used = '';
         if (userProfile.aiProvider === 'openai' || apiKey) {
-            result = await callOpenAI();
+            try {
+                result = await callOpenAI();
+                used = 'DeepSeek';
+            } catch (openAiErr: any) {
+                console.warn("DeepSeek/OpenAI failed, falling back to Gemini:", openAiErr);
+                // Fallback to Gemini
+                result = await callGemini();
+                used = 'Gemini (備援)';
+            }
         } else {
             result = await callGemini();
+            used = 'Gemini';
         }
 
         if (result) {
+            setUsedModel(used);
             setFormData({
                 item: result.item_name,
                 calories: result.calories,
@@ -212,7 +225,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
     } catch (error: any) {
         console.error("Analysis failed", error);
         if (error.message?.includes("API Key")) {
-             setAiError("AI 分析失敗: API Key 缺失");
+             setAiError("AI 分析失敗: 所有 API Key 皆無效");
         } else {
              setAiError("AI 分析失敗: " + (error.message || "請稍後再試"));
         }
@@ -300,6 +313,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
       setEditId(null);
       setFormStep('INPUT');
       setAiError(null);
+      setUsedModel('');
       setFormData({ item: '', calories: 0, p: 0, c: 0, f: 0 });
   };
 
@@ -514,7 +528,10 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                               )}
 
                               <div>
-                                  <label className="block text-xs font-bold text-gray-500 mb-1">食物名稱</label>
+                                  <div className="flex justify-between items-baseline mb-1">
+                                      <label className="block text-xs font-bold text-gray-500">食物名稱</label>
+                                      {usedModel && <span className="text-[10px] text-gray-400 bg-gray-100 dark:bg-charcoal-900 px-2 py-0.5 rounded">by {usedModel}</span>}
+                                  </div>
                                   <input 
                                       type="text" 
                                       value={formData.item}
