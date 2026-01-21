@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, NutritionLog, UserProfile, WorkoutRecord } from './types';
 import { NUTRITION_LOGS, MOCK_HISTORY } from './constants';
-import { apiGetUserProfile, apiSaveUserProfile, apiGetWorkoutHistory, apiSaveWorkoutRecord, apiGetNutritionLogs, apiSyncNutritionState, apiDeleteWorkoutRecord } from './lib/db';
+import { apiGetUserProfile, apiSaveUserProfile, apiGetWorkoutHistory, apiSaveWorkoutRecord, apiGetNutritionLogs, apiSyncNutritionState, apiDeleteWorkoutRecord, apiDeleteNutritionLog } from './lib/db';
 import { auth, onAuthStateChanged, signOut } from './lib/firebase'; // Updated import to include signOut
 
 import Layout from './components/Layout';
@@ -120,11 +120,15 @@ const App: React.FC = () => {
   };
 
   const handleDeleteRecord = async (recordId: string) => {
-      if(window.confirm("確定要刪除這筆訓練記錄嗎？")) {
-          const newHistory = historyLogs.filter(h => h.id !== recordId);
-          setHistoryLogs(newHistory);
-          await apiDeleteWorkoutRecord(recordId);
-      }
+      // Confirmation handled in History component
+      const newHistory = historyLogs.filter(h => h.id !== recordId);
+      setHistoryLogs(newHistory);
+      await apiDeleteWorkoutRecord(recordId);
+  };
+
+  const handleDeleteNutrition = async (logId: string) => {
+      setNutritionLogs(prev => prev.filter(l => l.id !== logId));
+      await apiDeleteNutritionLog(logId);
   };
 
   const handleGoToSettings = () => {
@@ -188,6 +192,8 @@ const App: React.FC = () => {
             historyLogs={historyLogs} 
             userProfile={userProfile!} 
             onGoToSettings={handleGoToSettings}
+            nutritionLogs={nutritionLogs}
+            onDeleteNutrition={handleDeleteNutrition}
           />
         );
       case View.PROGRESS:

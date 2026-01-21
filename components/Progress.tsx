@@ -12,8 +12,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-charcoal-900 text-white p-2 rounded text-xs shadow-lg border border-gray-700">
-        <p className="label font-bold mb-1">{label}</p>
-        <p className="text-neon-green">{`${payload[0].name} : ${payload[0].value}`}</p>
+        <p className="label font-bold mb-1 opacity-70">{label}</p>
+        <p className="text-neon-green font-bold text-sm">{`${payload[0].name} : ${payload[0].value}`}</p>
       </div>
     );
   }
@@ -42,7 +42,8 @@ const Progress: React.FC<ProgressProps> = ({ historyLogs }) => {
               });
           }
           // Format date to MM/DD
-          const dateKey = log.date.slice(5).replace('-', '/');
+          const date = new Date(log.date);
+          const dateKey = `${date.getMonth() + 1}/${date.getDate()}`;
           
           if (data[dateKey]) {
               data[dateKey] += dailyVolume;
@@ -104,12 +105,12 @@ const Progress: React.FC<ProgressProps> = ({ historyLogs }) => {
                 <TrendingUp size={20} className="text-neon-green" />
                 近期訓練容量 (Volume)
             </h3>
-            <span className="text-xs text-gray-500 font-mono">Total kg lifted</span>
+            <span className="text-xs text-gray-500 font-mono">Total kg</span>
         </div>
         <div className="h-64 w-full">
           {volumeData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={volumeData}>
+                <AreaChart data={volumeData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorVol" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#a3e635" stopOpacity={0.3}/>
@@ -125,17 +126,20 @@ const Progress: React.FC<ProgressProps> = ({ historyLogs }) => {
                     dy={10}
                   />
                   <YAxis 
-                    hide 
+                    tick={{fill: '#9ca3af', fontSize: 10}} 
+                    axisLine={false}
+                    tickLine={false}
                   />
-                  <Tooltip content={<CustomTooltip />} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#a3e635', strokeWidth: 1, strokeDasharray: '3 3' }} />
                   <Area 
                     type="monotone" 
                     dataKey="volume" 
-                    name="容量 (kg)"
+                    name="容量"
                     stroke="#a3e635" 
                     fillOpacity={1} 
                     fill="url(#colorVol)" 
                     strokeWidth={3}
+                    activeDot={{ r: 6, strokeWidth: 0, fill: '#fff' }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -156,19 +160,19 @@ const Progress: React.FC<ProgressProps> = ({ historyLogs }) => {
         <div className="h-64 w-full">
           {strengthData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={strengthData} layout="vertical" margin={{ left: 0, right: 20 }}>
+                <BarChart data={strengthData} layout="vertical" margin={{ left: 0, right: 20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#374151" opacity={0.3} />
                   <XAxis type="number" hide />
                   <YAxis 
                     dataKey="exercise" 
                     type="category" 
                     width={80} 
-                    tick={{fill: '#9ca3af', fontSize: 10}} 
+                    tick={{fill: '#9ca3af', fontSize: 11, fontWeight: 500}} 
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip cursor={{fill: 'transparent'}} content={<CustomTooltip />} />
-                  <Bar dataKey="weight" name="最大重量 (kg)" fill="#22d3ee" radius={[0, 4, 4, 0]} barSize={24} />
+                  <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} content={<CustomTooltip />} />
+                  <Bar dataKey="weight" name="最大重量 (kg)" fill="#22d3ee" radius={[0, 4, 4, 0]} barSize={20} />
                 </BarChart>
               </ResponsiveContainer>
           ) : (

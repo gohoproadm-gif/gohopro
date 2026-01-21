@@ -38,6 +38,7 @@ export interface Exercise {
   reps: string;
   weight?: number; // Added weight field
   completed: boolean;
+  section?: 'warmup' | 'main' | 'core'; // New: Workout Section
 }
 
 export interface DailyPlan {

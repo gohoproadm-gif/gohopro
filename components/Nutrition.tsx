@@ -29,6 +29,13 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
+  // Delete Confirmation State
+  const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string | null, item: string}>({
+      isOpen: false,
+      id: null,
+      item: ''
+  });
+
   // Form State
   const [formStep, setFormStep] = useState<'INPUT' | 'RESULT'>('INPUT');
   const [editId, setEditId] = useState<string | null>(null);
@@ -266,11 +273,22 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
       setShowAddModal(true);
   };
 
-  const handleDeleteClick = async (id: string) => {
-      if (window.confirm('確定要刪除這筆記錄嗎？')) {
-          setLogs(prev => prev.filter(l => l.id !== id));
-          await apiDeleteNutritionLog(id);
+  const handleDeleteClick = (e: React.MouseEvent, log: NutritionLog) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setDeleteModal({
+          isOpen: true,
+          id: log.id,
+          item: log.item
+      });
+  };
+
+  const confirmDelete = async () => {
+      if (deleteModal.id) {
+          setLogs(prev => prev.filter(l => l.id !== deleteModal.id));
+          await apiDeleteNutritionLog(deleteModal.id);
       }
+      setDeleteModal({ isOpen: false, id: null, item: '' });
   };
 
   const handleSave = async () => {
@@ -442,13 +460,15 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                             <div className="flex gap-1 ml-2 pl-2 border-l border-gray-100 dark:border-gray-700">
                                 <button 
                                     onClick={() => handleEditClick(log)}
-                                    className="p-2 text-gray-400 hover:text-neon-blue hover:bg-neon-blue/10 rounded-lg transition-colors"
+                                    className="p-2 text-gray-400 hover:text-neon-blue hover:bg-neon-blue/10 rounded-lg transition-colors cursor-pointer"
+                                    type="button"
                                 >
                                     <Pencil size={16} />
                                 </button>
                                 <button 
-                                    onClick={() => handleDeleteClick(log.id)}
-                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                    onClick={(e) => handleDeleteClick(e, log)}
+                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                                    type="button"
                                 >
                                     <Trash2 size={16} />
                                 </button>
@@ -457,12 +477,43 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                     </div>
                 ))
               ) : (
-                  <div className="text-center py-10 text-gray-400 bg-gray-50 dark:bg-charcoal-800/50 rounded-xl border-dashed border border-gray-200 dark:border-gray-700">
+                  <div className="text-center py-10 text-gray-400 bg-gray-50 dark:bg-charcoal-800/50 rounded-xl border-dashed border border-gray-200 dark:border-charcoal-700">
                       <p>本日無記錄，按「新增飲食」開始！</p>
                   </div>
               )}
           </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal.isOpen && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+                <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
+                    <div className="flex flex-col items-center text-center mb-6">
+                        <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-3 text-red-500">
+                            <Trash2 size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">刪除飲食記錄？</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                            您確定要刪除「<span className="font-bold text-gray-800 dark:text-gray-200">{deleteModal.item}</span>」嗎？
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => setDeleteModal({ isOpen: false, id: null, item: '' })}
+                            className="flex-1 py-2.5 rounded-xl font-bold bg-gray-100 dark:bg-charcoal-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-charcoal-600 transition-colors"
+                        >
+                            取消
+                        </button>
+                        <button 
+                            onClick={confirmDelete}
+                            className="flex-1 py-2.5 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+                        >
+                            確認刪除
+                        </button>
+                    </div>
+                </div>
+            </div>
+      )}
 
       {/* Modal */}
       {showAddModal && (

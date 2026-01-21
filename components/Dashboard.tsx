@@ -306,6 +306,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
                           <button onClick={() => setTempSteps(tempSteps + 100)} className="p-3 bg-gray-100 dark:bg-charcoal-900 rounded-full"><Plus size={20}/></button>
                       </div>
                       
+                      <div className="flex justify-center gap-2">
+                          <button onClick={() => setTempSteps(tempSteps + 500)} className="px-3 py-1 bg-gray-100 dark:bg-charcoal-900 rounded-lg text-xs font-bold text-gray-500 hover:text-neon-blue">+500</button>
+                          <button onClick={() => setTempSteps(tempSteps + 1000)} className="px-3 py-1 bg-gray-100 dark:bg-charcoal-900 rounded-lg text-xs font-bold text-gray-500 hover:text-neon-blue">+1000</button>
+                      </div>
+
                       <button onClick={handleSaveSteps} className="w-full bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2">
                           <Save size={18}/> 儲存
                       </button>

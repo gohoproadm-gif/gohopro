@@ -79,10 +79,12 @@ export const DEFAULT_PLANS: DailyPlan[] = [
     focus: "胸部 / 三頭肌",
     duration: 45,
     exercises: [
-      { id: 'e1', name: '槓鈴臥推', sets: 4, reps: '8-10', completed: false },
-      { id: 'e2', name: '上斜啞鈴推舉', sets: 3, reps: '10-12', completed: false },
-      { id: 'e3', name: '繩索夾胸', sets: 3, reps: '12-15', completed: false },
-      { id: 'e4', name: '三頭肌下壓', sets: 3, reps: '12-15', completed: false },
+      { id: 'w1', name: '彈力帶擴胸', sets: 2, reps: '20', completed: false, section: 'warmup' },
+      { id: 'e1', name: '槓鈴臥推', sets: 4, reps: '8-10', completed: false, section: 'main' },
+      { id: 'e2', name: '上斜啞鈴推舉', sets: 3, reps: '10-12', completed: false, section: 'main' },
+      { id: 'e3', name: '繩索夾胸', sets: 3, reps: '12-15', completed: false, section: 'main' },
+      { id: 'e4', name: '三頭肌下壓', sets: 3, reps: '12-15', completed: false, section: 'main' },
+      { id: 'c1', name: '捲腹', sets: 3, reps: '20', completed: false, section: 'core' },
     ]
   },
   {
@@ -91,10 +93,12 @@ export const DEFAULT_PLANS: DailyPlan[] = [
     focus: "背部 / 二頭肌",
     duration: 50,
     exercises: [
-      { id: 'b1', name: '引體向上', sets: 4, reps: '力竭', completed: false },
-      { id: 'b2', name: '槓鈴划船', sets: 4, reps: '8-10', completed: false },
-      { id: 'b3', name: '高位下拉', sets: 3, reps: '10-12', completed: false },
-      { id: 'b4', name: '二頭肌彎舉', sets: 3, reps: '12-15', completed: false },
+      { id: 'w1', name: '貓牛式伸展', sets: 2, reps: '60秒', completed: false, section: 'warmup' },
+      { id: 'b1', name: '引體向上', sets: 4, reps: '力竭', completed: false, section: 'main' },
+      { id: 'b2', name: '槓鈴划船', sets: 4, reps: '8-10', completed: false, section: 'main' },
+      { id: 'b3', name: '高位下拉', sets: 3, reps: '10-12', completed: false, section: 'main' },
+      { id: 'b4', name: '二頭肌彎舉', sets: 3, reps: '12-15', completed: false, section: 'main' },
+      { id: 'c1', name: '平板支撐', sets: 3, reps: '60秒', completed: false, section: 'core' },
     ]
   },
   {
@@ -103,14 +107,15 @@ export const DEFAULT_PLANS: DailyPlan[] = [
     focus: "腹肌 / 核心",
     duration: 20,
     exercises: [
-      { id: 'c1', name: '平板支撐', sets: 3, reps: '60秒', completed: false },
-      { id: 'c2', name: '捲腹', sets: 3, reps: '20', completed: false },
-      { id: 'c3', name: '俄羅斯轉體', sets: 3, reps: '20', completed: false },
+      { id: 'w1', name: '開合跳', sets: 2, reps: '30秒', completed: false, section: 'warmup' },
+      { id: 'c1', name: '平板支撐', sets: 3, reps: '60秒', completed: false, section: 'main' },
+      { id: 'c2', name: '捲腹', sets: 3, reps: '20', completed: false, section: 'main' },
+      { id: 'c3', name: '俄羅斯轉體', sets: 3, reps: '20', completed: false, section: 'main' },
     ]
   }
 ];
 
-export const TODAY_PLAN = DEFAULT_PLANS[0]; // For backward compatibility if needed
+export const TODAY_PLAN = DEFAULT_PLANS[0]; 
 
 export const WEIGHT_DATA: WeightData[] = [
   { date: '10/01', weight: 75.0 },

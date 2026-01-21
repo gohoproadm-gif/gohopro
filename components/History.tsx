@@ -11,6 +11,7 @@ interface HistoryProps {
 const History: React.FC<HistoryProps> = ({ logs, onDeleteRecord }) => {
   const [filterDate, setFilterDate] = useState<string>('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const filteredHistory = useMemo(() => {
     if (!filterDate) return logs;
@@ -19,6 +20,18 @@ const History: React.FC<HistoryProps> = ({ logs, onDeleteRecord }) => {
 
   const toggleExpand = (id: string) => {
       setExpandedId(prev => prev === id ? null : id);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      setDeleteId(id);
+  };
+
+  const confirmDelete = () => {
+      if (deleteId && onDeleteRecord) {
+          onDeleteRecord(deleteId);
+          setDeleteId(null);
+      }
   };
 
   return (
@@ -112,11 +125,8 @@ const History: React.FC<HistoryProps> = ({ logs, onDeleteRecord }) => {
                         {onDeleteRecord && (
                             <div className="mt-6 flex justify-end">
                                 <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onDeleteRecord(record.id);
-                                    }}
-                                    className="flex items-center gap-1 text-xs text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-2 rounded-lg transition-colors border border-red-200 dark:border-red-900/30"
+                                    onClick={(e) => handleDeleteClick(e, record.id)}
+                                    className="flex items-center gap-1 text-xs text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-2 rounded-lg transition-colors border border-red-200 dark:border-red-900/30 cursor-pointer"
                                 >
                                     <Trash2 size={14} /> 刪除此記錄
                                 </button>
@@ -143,6 +153,37 @@ const History: React.FC<HistoryProps> = ({ logs, onDeleteRecord }) => {
             </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteId && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+                <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
+                    <div className="flex flex-col items-center text-center mb-6">
+                        <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-3 text-red-500">
+                            <Trash2 size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">確認刪除？</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                            您確定要刪除這筆訓練記錄嗎？<br/>此動作無法復原。
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => setDeleteId(null)}
+                            className="flex-1 py-2.5 rounded-xl font-bold bg-gray-100 dark:bg-charcoal-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-charcoal-600 transition-colors"
+                        >
+                            取消
+                        </button>
+                        <button 
+                            onClick={confirmDelete}
+                            className="flex-1 py-2.5 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+                        >
+                            確認刪除
+                        </button>
+                    </div>
+                </div>
+            </div>
+      )}
     </div>
   );
 };

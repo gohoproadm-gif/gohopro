@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DEFAULT_PLANS, HK_HOLIDAYS } from '../constants';
-import { DailyPlan, ScheduledWorkout, WorkoutRecord, ExerciseSetLog, CalendarEvent, NutritionLog, UserProfile } from '../types';
-import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings, Minus, RefreshCw, RotateCcw } from 'lucide-react';
+import { DailyPlan, ScheduledWorkout, WorkoutRecord, ExerciseSetLog, CalendarEvent, NutritionLog, UserProfile, Exercise } from '../types';
+import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings, Minus, RefreshCw, RotateCcw, PenTool, Flame, Pencil, Save, Trophy, Share2 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
-import { apiGetSchedule, apiSaveSchedule, apiGetEvents, apiSaveEvent, apiDeleteEvent, apiGetNutritionLogs } from '../lib/db';
+import { apiGetSchedule, apiSaveSchedule, apiGetEvents, apiSaveEvent, apiDeleteEvent } from '../lib/db';
 
-type Mode = 'TIMETABLE' | 'PLANS' | 'CREATE' | 'ACTIVE_SESSION';
+type Mode = 'TIMETABLE' | 'PLANS' | 'CREATE' | 'MANUAL_CREATE' | 'ACTIVE_SESSION' | 'SUMMARY';
 
 interface WorkoutProps {
   autoStart?: boolean;
@@ -15,19 +15,31 @@ interface WorkoutProps {
   historyLogs?: WorkoutRecord[]; 
   userProfile: UserProfile;
   onGoToSettings: () => void;
+  nutritionLogs: NutritionLog[];
+  onDeleteNutrition: (id: string) => Promise<void>;
 }
 
+// Singleton AudioContext to prevent browser limits
+let audioCtx: AudioContext | null = null;
+
 const playBeep = (count: number = 1) => {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
     
     try {
-        const ctx = new AudioContext();
+        if (!audioCtx || audioCtx.state === 'closed') {
+            audioCtx = new AudioContextClass();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+
         const playTone = (time: number) => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
             osc.connect(gain);
-            gain.connect(ctx.destination);
+            gain.connect(audioCtx.destination);
             
             osc.type = 'sine';
             osc.frequency.setValueAtTime(880, time);
@@ -40,8 +52,9 @@ const playBeep = (count: number = 1) => {
             osc.stop(time + 0.2);
         };
 
+        const now = audioCtx.currentTime;
         for (let i = 0; i < count; i++) {
-            playTone(ctx.currentTime + i * 0.3);
+            playTone(now + i * 0.3);
         }
     } catch (e) {
         console.error("Audio error", e);
@@ -64,11 +77,19 @@ const cleanJson = (text: string) => {
     return clean;
 };
 
-const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFinishWorkout, historyLogs = [], userProfile, onGoToSettings }) => {
+const Workout: React.FC<WorkoutProps> = ({ 
+    autoStart, 
+    onAutoStartConsumed, 
+    onFinishWorkout, 
+    historyLogs = [], 
+    userProfile, 
+    onGoToSettings,
+    nutritionLogs,
+    onDeleteNutrition
+}) => {
   const [mode, setMode] = useState<Mode>('TIMETABLE');
   const [schedule, setSchedule] = useState<ScheduledWorkout[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [nutritionLogs, setNutritionLogs] = useState<NutritionLog[]>([]);
   
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -80,37 +101,113 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
   const [restTimer, setRestTimer] = useState<number>(0);
   const [isResting, setIsResting] = useState<boolean>(false);
 
+  // Plans Management - Lazy Initialization for Robustness
+  const [allPlans, setAllPlans] = useState<DailyPlan[]>(() => {
+      try {
+          const savedPlans = localStorage.getItem('fitlife_plans');
+          return savedPlans ? JSON.parse(savedPlans) : DEFAULT_PLANS;
+      } catch (e) {
+          return DEFAULT_PLANS;
+      }
+  });
+
+  // Delete Confirmation State (Unified)
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+      isOpen: boolean, 
+      type: 'PLAN' | 'MEAL' | 'EVENT' | 'WORKOUT',
+      id: string | null, 
+      title: string
+  }>({
+      isOpen: false,
+      type: 'PLAN',
+      id: null,
+      title: ''
+  });
+
   // AI State
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // Manual Create / Edit State
+  const [manualPlanTitle, setManualPlanTitle] = useState('');
+  const [manualExercises, setManualExercises] = useState<{name: string, sets: number, reps: string, weight: number, section: 'warmup' | 'main' | 'core'}[]>([]);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+
   // Add Event/Workout Modal
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [eventType, setEventType] = useState<'ACTIVITY' | 'WORKOUT'>('WORKOUT');
   const [newEventData, setNewEventData] = useState<{title: string, time: string, description: string}>({title: '', time: '09:00', description: ''});
-  const [selectedPlanId, setSelectedPlanId] = useState<string>(DEFAULT_PLANS[0].id);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
 
+  // Initial Data Load
   useEffect(() => {
     const loadData = async () => {
         const s = await apiGetSchedule();
         setSchedule(s);
         const e = await apiGetEvents();
         setEvents(e);
-        const n = await apiGetNutritionLogs();
-        setNutritionLogs(n);
     };
     loadData();
   }, []);
 
+  // SESSION PERSISTENCE: Restore session on mount
+  useEffect(() => {
+      const savedSession = localStorage.getItem('fitlife_active_session');
+      if (savedSession) {
+          try {
+              const data = JSON.parse(savedSession);
+              // Only restore if data looks valid and implies an active session
+              if (data.mode === 'ACTIVE_SESSION' && data.activePlan && data.sessionLogs) {
+                  setActivePlan(data.activePlan);
+                  setSessionLogs(data.sessionLogs);
+                  setSessionStartTime(data.sessionStartTime || Date.now());
+                  setMode('ACTIVE_SESSION');
+                  if (data.isResting && data.restTimer > 0) {
+                      setIsResting(true);
+                      setRestTimer(data.restTimer); // Note: timer might be off by the time elapsed while closed, simple restore for now
+                  }
+              }
+          } catch (e) {
+              console.error("Failed to restore session", e);
+              localStorage.removeItem('fitlife_active_session');
+          }
+      }
+  }, []);
+
+  // SESSION PERSISTENCE: Save session on change
+  useEffect(() => {
+      if (mode === 'ACTIVE_SESSION' && activePlan) {
+          const sessionData = {
+              mode,
+              activePlan,
+              sessionLogs,
+              sessionStartTime,
+              isResting,
+              restTimer
+          };
+          localStorage.setItem('fitlife_active_session', JSON.stringify(sessionData));
+      } else if (mode === 'TIMETABLE') {
+          // Clear only when explicitly back to timetable (finished or cancelled)
+          localStorage.removeItem('fitlife_active_session');
+      }
+  }, [mode, activePlan, sessionLogs, sessionStartTime, isResting, restTimer]);
+
+  // Ensure selectedPlanId has a value once plans are loaded
+  useEffect(() => {
+      if (allPlans.length > 0 && !selectedPlanId) {
+          setSelectedPlanId(allPlans[0].id);
+      }
+  }, [allPlans, selectedPlanId]);
+
   useEffect(() => {
       if (autoStart && onAutoStartConsumed) {
           const todayPlanId = schedule.find(s => s.date === selectedDate)?.planId;
-          const planToStart = DEFAULT_PLANS.find(p => p.id === todayPlanId) || DEFAULT_PLANS[0];
+          const planToStart = allPlans.find(p => p.id === todayPlanId) || allPlans[0];
           handleStartSession(planToStart);
           onAutoStartConsumed();
       }
-  }, [autoStart]);
+  }, [autoStart, allPlans]);
 
   useEffect(() => {
       let interval: any;
@@ -129,6 +226,11 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       return () => clearInterval(interval);
   }, [isResting, restTimer]);
 
+  const updateAndSavePlans = (newPlans: DailyPlan[]) => {
+      setAllPlans(newPlans);
+      localStorage.setItem('fitlife_plans', JSON.stringify(newPlans));
+  };
+
   // --- Smart Pre-fill Logic ---
   const findLastSessionStats = (exerciseName: string) => {
       for (const record of historyLogs) {
@@ -138,8 +240,6 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
           if (match && match.sets.length > 0) {
               const completedSets = match.sets.filter(s => s.completed && s.weight > 0);
               if (completedSets.length > 0) {
-                  // Return the heavyest set to encourage progressive overload, or just the last set
-                  // Let's return the last completed set to be safe
                   return completedSets[completedSets.length - 1];
               }
           }
@@ -154,7 +254,6 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       const initialLogs: Record<string, ExerciseSetLog[]> = {};
       
       plan.exercises.forEach(ex => {
-          // Check history for pre-fill
           const lastStats = findLastSessionStats(ex.name);
           const defaultWeight = lastStats ? lastStats.weight : (ex.weight || 0);
           const defaultReps = lastStats ? lastStats.reps : (parseInt(ex.reps) || 10);
@@ -171,16 +270,43 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       setMode('ACTIVE_SESSION');
   };
 
+  // Transition to Summary View
   const handleFinishSession = async () => {
-      if (!activePlan) return;
+      setMode('SUMMARY');
+      // Pause rest timer if active
+      setIsResting(false);
+  };
+
+  const calculateSessionStats = () => {
+      if (!activePlan) return { duration: 0, volume: 0, completedSets: 0, totalSets: 0 };
       const duration = Math.round((Date.now() - sessionStartTime) / 60000);
+      let volume = 0;
+      let completedSets = 0;
+      let totalSets = 0;
+
+      Object.values(sessionLogs).forEach((logs: ExerciseSetLog[]) => {
+          totalSets += logs.length;
+          logs.forEach(l => {
+              if (l.completed) {
+                  completedSets++;
+                  if (l.weight > 0 && l.reps > 0) volume += l.weight * l.reps;
+              }
+          });
+      });
+
+      return { duration, volume, completedSets, totalSets };
+  };
+
+  const handleConfirmFinish = async () => {
+      if (!activePlan) return;
+      const { duration } = calculateSessionStats();
       
       const record: WorkoutRecord = {
           id: Date.now().toString(),
           date: new Date().toISOString().split('T')[0],
           type: activePlan.title,
           duration: duration,
-          calories: duration * 6,
+          calories: duration * 6, // Rough estimate
           completed: true,
           details: activePlan.exercises.map(ex => ({
               exerciseName: ex.name,
@@ -201,6 +327,8 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       setSchedule(newSchedule);
       await apiSaveSchedule(newSchedule);
 
+      // Cleanup
+      localStorage.removeItem('fitlife_active_session');
       setActivePlan(null);
       setMode('TIMETABLE');
   };
@@ -229,17 +357,41 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       setNewEventData({title: '', time: '09:00', description: ''});
   };
 
-  const handleDeleteEvent = async (id: string) => {
-      setEvents(events.filter(e => e.id !== id));
-      await apiDeleteEvent(id);
+  // --- Deletion Handlers ---
+  
+  const initiateDelete = (e: React.MouseEvent, type: 'PLAN' | 'MEAL' | 'EVENT' | 'WORKOUT', id: string, title: string) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setDeleteConfirmation({ isOpen: true, type, id, title });
   };
 
-  const handleDeleteWorkout = async (planId: string, date: string) => {
-      const newSchedule = schedule.filter(s => !(s.planId === planId && s.date === date));
-      setSchedule(newSchedule);
-      await apiSaveSchedule(newSchedule);
+  const executeDelete = async () => {
+      const { type, id } = deleteConfirmation;
+      if (!id) return;
+
+      if (type === 'PLAN') {
+          setAllPlans(prev => {
+              const updatedPlans = prev.filter(p => p.id !== id);
+              localStorage.setItem('fitlife_plans', JSON.stringify(updatedPlans));
+              return updatedPlans;
+          });
+      } else if (type === 'MEAL') {
+          // Sync deletion by calling prop method
+          await onDeleteNutrition(id);
+      } else if (type === 'EVENT') {
+          setEvents(prev => prev.filter(e => e.id !== id));
+          await apiDeleteEvent(id);
+      } else if (type === 'WORKOUT') {
+          const newSchedule = schedule.filter(s => !(s.planId === id && s.date === selectedDate));
+          setSchedule(newSchedule);
+          await apiSaveSchedule(newSchedule);
+      }
+
+      setDeleteConfirmation({ isOpen: false, type: 'PLAN', id: null, title: '' });
   };
 
+  // ... (Keep existing helpers like getApiKey, getDeepSeekConfig, callOpenAI, callGemini, handleGeneratePlan)
+  
   const getApiKey = () => {
     try {
         // @ts-ignore
@@ -257,13 +409,11 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
     return null;
   };
 
-  // Robust DeepSeek/OpenAI Key Retrieval
   const getDeepSeekConfig = () => {
       let apiKey = userProfile.openaiApiKey;
       let baseUrl = userProfile.openaiBaseUrl;
       let model = userProfile.openaiModel;
 
-      // Try VITE_ env vars (most likely for this project)
       try {
           // @ts-ignore
           if (typeof import.meta !== 'undefined' && import.meta.env) {
@@ -276,7 +426,6 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
           }
       } catch(e) {}
 
-      // Try process.env as fallback
       if (!apiKey && typeof process !== 'undefined' && process.env) {
           apiKey = process.env.VITE_OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
           baseUrl = baseUrl || process.env.VITE_OPENAI_BASE_URL || process.env.NEXT_PUBLIC_OPENAI_BASE_URL;
@@ -295,7 +444,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
 
         if (!apiKey) throw new Error("API Key 缺失。請至設定頁面配置 API Key。");
 
-        const systemPrompt = `Create a workout plan based on the request. Return strictly valid JSON with structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12" } ] }`;
+        const systemPrompt = `Create a workout plan based on the request. Return strictly valid JSON with structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`;
 
         const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
@@ -329,7 +478,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       const ai = new GoogleGenAI({ apiKey: apiKey });
       const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: `Create a workout plan based on this request: "${aiPrompt}". Return strictly JSON. Structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12" } ] }`,
+            contents: `Create a workout plan based on this request: "${aiPrompt}". Return strictly JSON. Structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`,
             config: { responseMimeType: "application/json" }
       });
       return JSON.parse(cleanJson(response.text || "{}"));
@@ -343,7 +492,6 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
           let result;
           const { apiKey } = getDeepSeekConfig();
 
-          // If DeepSeek/OpenAI key is present, use it. Otherwise fall back to Gemini.
           if (userProfile.aiProvider === 'openai' || apiKey) {
                result = await callOpenAI();
           } else {
@@ -361,6 +509,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                       name: e.name,
                       sets: e.sets,
                       reps: e.reps,
+                      section: e.section || 'main',
                       completed: false
                   }))
               };
@@ -368,19 +517,114 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
               const newSchedule = [...schedule, { date: selectedDate, planId: newPlan.id, completed: false }];
               setSchedule(newSchedule);
               await apiSaveSchedule(newSchedule);
-              DEFAULT_PLANS.push(newPlan);
+              updateAndSavePlans([...allPlans, newPlan]);
+              
               setAiPrompt('');
               setMode('TIMETABLE');
           }
       } catch (e: any) {
-          if (e.message?.includes("API Key")) {
+          let msg = e.message || "未知錯誤";
+          if (msg.includes("Insufficient Balance")) {
+              setAiError("生成失敗: 餘額不足 (Insufficient Balance)。請檢查您的 API Key 額度，或切換至 Google Gemini。");
+          } else if (msg.includes("API Key")) {
                setAiError("生成失敗: API Key 缺失 (請檢查設定)");
           } else {
-               setAiError("生成失敗: " + (e.message || "未知錯誤"));
+               setAiError("生成失敗: " + msg);
           }
       } finally {
           setIsGenerating(false);
       }
+  };
+
+  // --- Manual Create / Edit Functions ---
+  const addManualExercise = (section: 'warmup' | 'main' | 'core') => {
+      setManualExercises([...manualExercises, { name: '', sets: 3, reps: '10', weight: 0, section }]);
+  };
+
+  const updateManualExercise = (index: number, field: string, value: any) => {
+      const newEx = [...manualExercises];
+      newEx[index] = { ...newEx[index], [field]: value };
+      setManualExercises(newEx);
+  };
+
+  const removeManualExercise = (index: number) => {
+      setManualExercises(manualExercises.filter((_, i) => i !== index));
+  };
+
+  const handleEditPlan = (e: React.MouseEvent, plan: DailyPlan) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setEditingPlanId(plan.id);
+      setManualPlanTitle(plan.title);
+      // Map existing exercises to the manual form format
+      const formattedExercises = plan.exercises.map(ex => ({
+          name: ex.name,
+          sets: ex.sets,
+          reps: ex.reps,
+          weight: ex.weight || 0,
+          section: ex.section || 'main'
+      }));
+      setManualExercises(formattedExercises);
+      setMode('MANUAL_CREATE');
+  };
+
+  const handleSaveManualPlan = async () => {
+      if (!manualPlanTitle.trim()) {
+          alert("請輸入課表名稱");
+          return;
+      }
+      if (manualExercises.length === 0) {
+          alert("請至少新增一個動作");
+          return;
+      }
+
+      if (editingPlanId) {
+          // Update existing
+          const updatedPlans = allPlans.map(p => {
+              if (p.id === editingPlanId) {
+                  return {
+                      ...p,
+                      title: manualPlanTitle,
+                      focus: "自訂訓練",
+                      exercises: manualExercises.map((e, i) => ({
+                          id: `mex_${editingPlanId}_${i}`, // keep somewhat stable or reset
+                          name: e.name || '未命名動作',
+                          sets: e.sets,
+                          reps: e.reps,
+                          weight: e.weight,
+                          section: e.section,
+                          completed: false
+                      }))
+                  };
+              }
+              return p;
+          });
+          updateAndSavePlans(updatedPlans);
+      } else {
+          // Create new
+          const newPlan: DailyPlan = {
+              id: 'man_' + Date.now(),
+              title: manualPlanTitle,
+              focus: "自訂訓練",
+              duration: 60,
+              exercises: manualExercises.map((e, i) => ({
+                  id: `mex_${i}`,
+                  name: e.name || '未命名動作',
+                  sets: e.sets,
+                  reps: e.reps,
+                  weight: e.weight,
+                  section: e.section,
+                  completed: false
+              }))
+          };
+          updateAndSavePlans([...allPlans, newPlan]);
+      }
+      
+      // Reset
+      setEditingPlanId(null);
+      setManualPlanTitle('');
+      setManualExercises([]);
+      setMode('PLANS'); // Go back to library list
   };
 
   const updateSetLog = (exerciseId: string, setIndex: number, field: keyof ExerciseSetLog, value: any) => {
@@ -502,12 +746,11 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
   const getTimelineItems = () => {
       const items: {time: string, type: string, title: string, detail?: string, id: string, originalObj: any}[] = [];
       
-      // Workouts
       const dailyWorkouts = schedule.filter(s => s.date === selectedDate);
       dailyWorkouts.forEach(s => {
-          const plan = DEFAULT_PLANS.find(p => p.id === s.planId);
+          const plan = allPlans.find(p => p.id === s.planId);
           items.push({
-              time: '--:--', // Workouts usually don't have strict time in this app unless recorded, we put them at top or generic
+              time: '--:--', 
               type: 'WORKOUT',
               title: plan?.title || '訓練',
               detail: s.completed ? '已完成' : '待完成',
@@ -516,7 +759,6 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
           });
       });
 
-      // Events
       const dailyEvents = events.filter(e => e.date === selectedDate);
       dailyEvents.forEach(e => {
           items.push({
@@ -529,7 +771,6 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
           });
       });
 
-      // Nutrition
       const dailyNutrition = nutritionLogs.filter(n => n.date === selectedDate);
       dailyNutrition.forEach(n => {
           items.push({
@@ -545,8 +786,61 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       return items.sort((a, b) => a.time.localeCompare(b.time));
   };
 
+  const isCurrentMonth = currentMonth.getMonth() === new Date().getMonth() && currentMonth.getFullYear() === new Date().getFullYear();
 
+  // --- Render Active Session Grouped ---
+  const renderExerciseGroup = (sectionName: string, exercises: Exercise[], color: string, icon: any) => {
+      if (exercises.length === 0) return null;
+      return (
+          <div className="space-y-4 mb-8">
+              <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 ${color}`}>
+                  {icon} {sectionName}
+              </h3>
+              {exercises.map((exercise) => {
+                  const prevStats = getPreviousPerformance(exercise.name);
+                  return (
+                  <div key={exercise.id} className="bg-white dark:bg-charcoal-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-charcoal-700">
+                      <div className="flex justify-between items-start mb-4">
+                          <h4 className="font-bold text-lg flex items-center gap-2">
+                              <Dumbbell size={18} className="text-neon-blue"/>
+                              {exercise.name}
+                          </h4>
+                          {prevStats ? (
+                              <div className="text-xs bg-gray-100 dark:bg-charcoal-900 text-gray-500 px-2 py-1 rounded flex items-center gap-1">
+                                  <HistoryIcon size={12} />
+                                  <span className="font-mono">上次: {prevStats}</span>
+                              </div>
+                          ) : (
+                              <span className="text-[10px] bg-neon-green/10 text-neon-green px-2 py-1 rounded">新動作</span>
+                          )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                          <div className="grid grid-cols-10 gap-2 text-xs font-bold text-gray-400 mb-1 px-1">
+                              <div className="col-span-1 text-center">SET</div><div className="col-span-3 text-center">KG</div><div className="col-span-3 text-center">REPS</div><div className="col-span-3 text-center">DONE</div>
+                          </div>
+                          {sessionLogs[exercise.id]?.map((set, idx) => (
+                              <div key={idx} className={`grid grid-cols-10 gap-2 items-center p-2 rounded-lg transition-colors ${set.completed ? 'bg-neon-green/10 border border-neon-green/30' : 'bg-gray-50 dark:bg-charcoal-900 border border-transparent'}`}>
+                                  <div className="col-span-1 text-center font-bold text-gray-500">{idx + 1}</div>
+                                  <div className="col-span-3"><input type="number" value={set.weight} onChange={(e) => updateSetLog(exercise.id, idx, 'weight', Number(e.target.value))} className="w-full bg-transparent text-center font-bold border-b border-gray-300 dark:border-gray-600 focus:border-neon-blue outline-none py-1"/></div>
+                                  <div className="col-span-3"><input type="number" value={set.reps} onChange={(e) => updateSetLog(exercise.id, idx, 'reps', Number(e.target.value))} className="w-full bg-transparent text-center font-bold border-b border-gray-300 dark:border-gray-600 focus:border-neon-blue outline-none py-1"/></div>
+                                  <div className="col-span-3 flex justify-center"><button onClick={() => toggleSetComplete(exercise.id, idx)} className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${set.completed ? 'bg-neon-green text-charcoal-900' : 'bg-gray-200 dark:bg-charcoal-700 text-gray-400'}`}><Check size={16} strokeWidth={3} /></button></div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              )})}
+          </div>
+      );
+  };
+
+  // --- Active Session View ---
   if (mode === 'ACTIVE_SESSION' && activePlan) {
+      // Group exercises
+      const warmupEx = activePlan.exercises.filter(e => e.section === 'warmup');
+      const mainEx = activePlan.exercises.filter(e => !e.section || e.section === 'main');
+      const coreEx = activePlan.exercises.filter(e => e.section === 'core');
+
       return (
           <div className="pb-20 relative min-h-[80vh]">
               <div className="sticky top-0 z-30 bg-white dark:bg-charcoal-900 border-b border-gray-200 dark:border-charcoal-700 p-4 -mx-4 md:-mx-8 mb-6 shadow-sm flex justify-between items-center">
@@ -564,42 +858,12 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                   <button onClick={handleFinishSession} className="bg-neon-green text-charcoal-900 font-bold px-4 py-2 rounded-lg text-sm shadow-lg shadow-neon-green/20">結束訓練</button>
               </div>
 
-              <div className="space-y-6">
-                  {activePlan.exercises.map((exercise) => {
-                      const prevStats = getPreviousPerformance(exercise.name);
-                      return (
-                      <div key={exercise.id} className="bg-white dark:bg-charcoal-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-charcoal-700">
-                          <div className="flex justify-between items-start mb-4">
-                              <h3 className="font-bold text-lg flex items-center gap-2">
-                                  <Dumbbell size={18} className="text-neon-blue"/>
-                                  {exercise.name}
-                              </h3>
-                              {prevStats ? (
-                                  <div className="text-xs bg-gray-100 dark:bg-charcoal-900 text-gray-500 px-2 py-1 rounded flex items-center gap-1">
-                                      <HistoryIcon size={12} />
-                                      <span className="font-mono">上次: {prevStats}</span>
-                                  </div>
-                              ) : (
-                                  <span className="text-[10px] bg-neon-green/10 text-neon-green px-2 py-1 rounded">新動作</span>
-                              )}
-                          </div>
-                          
-                          <div className="space-y-2">
-                              <div className="grid grid-cols-10 gap-2 text-xs font-bold text-gray-400 mb-1 px-1">
-                                  <div className="col-span-1 text-center">SET</div><div className="col-span-3 text-center">KG</div><div className="col-span-3 text-center">REPS</div><div className="col-span-3 text-center">DONE</div>
-                              </div>
-                              {sessionLogs[exercise.id]?.map((set, idx) => (
-                                  <div key={idx} className={`grid grid-cols-10 gap-2 items-center p-2 rounded-lg transition-colors ${set.completed ? 'bg-neon-green/10 border border-neon-green/30' : 'bg-gray-50 dark:bg-charcoal-900 border border-transparent'}`}>
-                                      <div className="col-span-1 text-center font-bold text-gray-500">{idx + 1}</div>
-                                      <div className="col-span-3"><input type="number" value={set.weight} onChange={(e) => updateSetLog(exercise.id, idx, 'weight', Number(e.target.value))} className="w-full bg-transparent text-center font-bold border-b border-gray-300 dark:border-gray-600 focus:border-neon-blue outline-none py-1"/></div>
-                                      <div className="col-span-3"><input type="number" value={set.reps} onChange={(e) => updateSetLog(exercise.id, idx, 'reps', Number(e.target.value))} className="w-full bg-transparent text-center font-bold border-b border-gray-300 dark:border-gray-600 focus:border-neon-blue outline-none py-1"/></div>
-                                      <div className="col-span-3 flex justify-center"><button onClick={() => toggleSetComplete(exercise.id, idx)} className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${set.completed ? 'bg-neon-green text-charcoal-900' : 'bg-gray-200 dark:bg-charcoal-700 text-gray-400'}`}><Check size={16} strokeWidth={3} /></button></div>
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
-                  )})}
+              <div className="space-y-2">
+                  {renderExerciseGroup("熱身", warmupEx, "text-orange-400", <Flame size={16}/>)}
+                  {renderExerciseGroup("主訓練", mainEx, "text-neon-blue", <Dumbbell size={16}/>)}
+                  {renderExerciseGroup("核心", coreEx, "text-purple-400", <RotateCcw size={16}/>)}
               </div>
+
               {isResting && (
                   <div className="fixed bottom-20 left-4 right-4 bg-charcoal-900 text-white p-4 rounded-xl shadow-2xl flex items-center justify-between z-40 animate-fade-in border border-charcoal-700">
                       <div>
@@ -623,8 +887,55 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       );
   }
 
-  const isCurrentMonth = currentMonth.getMonth() === new Date().getMonth() && currentMonth.getFullYear() === new Date().getFullYear();
+  // --- Summary View ---
+  if (mode === 'SUMMARY' && activePlan) {
+      const stats = calculateSessionStats();
+      return (
+          <div className="flex flex-col items-center justify-center py-10 animate-fade-in text-center space-y-8">
+              <div className="relative">
+                  <div className="absolute inset-0 bg-neon-green/20 blur-xl rounded-full"></div>
+                  <Trophy size={80} className="text-neon-green relative z-10" />
+              </div>
+              
+              <div className="space-y-2">
+                  <h2 className="text-3xl font-black text-gray-800 dark:text-white">訓練完成！</h2>
+                  <p className="text-gray-500">{activePlan.title}</p>
+              </div>
 
+              <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+                  <div className="bg-white dark:bg-charcoal-800 p-4 rounded-2xl border border-gray-200 dark:border-charcoal-700 flex flex-col items-center">
+                      <Clock size={24} className="text-neon-blue mb-2" />
+                      <span className="text-2xl font-bold">{stats.duration}</span>
+                      <span className="text-xs text-gray-500">分鐘</span>
+                  </div>
+                  <div className="bg-white dark:bg-charcoal-800 p-4 rounded-2xl border border-gray-200 dark:border-charcoal-700 flex flex-col items-center">
+                      <Dumbbell size={24} className="text-cta-orange mb-2" />
+                      <span className="text-2xl font-bold">{stats.volume.toLocaleString()}</span>
+                      <span className="text-xs text-gray-500">總容量 (kg)</span>
+                  </div>
+                  <div className="bg-white dark:bg-charcoal-800 p-4 rounded-2xl border border-gray-200 dark:border-charcoal-700 flex flex-col items-center">
+                      <Check size={24} className="text-neon-green mb-2" />
+                      <span className="text-2xl font-bold">{stats.completedSets} / {stats.totalSets}</span>
+                      <span className="text-xs text-gray-500">完成組數</span>
+                  </div>
+                  <div className="bg-white dark:bg-charcoal-800 p-4 rounded-2xl border border-gray-200 dark:border-charcoal-700 flex flex-col items-center">
+                      <Flame size={24} className="text-red-500 mb-2" />
+                      <span className="text-2xl font-bold">~{stats.duration * 6}</span>
+                      <span className="text-xs text-gray-500">消耗卡路里</span>
+                  </div>
+              </div>
+
+              <button 
+                  onClick={handleConfirmFinish}
+                  className="w-full max-w-sm bg-neon-green hover:bg-lime-400 text-charcoal-900 font-bold py-4 rounded-xl shadow-lg shadow-neon-green/20 transition-all active:scale-95"
+              >
+                  儲存紀錄
+              </button>
+          </div>
+      );
+  }
+
+  // --- Standard View ---
   return (
     <div className="space-y-6 pb-20">
         {/* Toggle Mode */}
@@ -637,7 +948,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
             </button>
             <button 
                 onClick={() => setMode('PLANS')}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${mode === 'PLANS' ? 'bg-white dark:bg-charcoal-900 shadow text-charcoal-900 dark:text-white' : 'text-gray-500'}`}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${mode === 'PLANS' || mode === 'CREATE' || mode === 'MANUAL_CREATE' ? 'bg-white dark:bg-charcoal-900 shadow text-charcoal-900 dark:text-white' : 'text-gray-500'}`}
             >
                 <List size={16} /> 課表庫
             </button>
@@ -707,7 +1018,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                                         {item.type === 'WORKOUT' && !item.originalObj.completed && (
                                             <button 
                                                 onClick={() => {
-                                                    const plan = DEFAULT_PLANS.find(p => p.id === item.id);
+                                                    const plan = allPlans.find(p => p.id === item.id);
                                                     if(plan) handleStartSession(plan);
                                                 }}
                                                 className="text-xs bg-cta-orange text-white px-3 py-1.5 rounded-full font-bold shadow-lg shadow-orange-500/20"
@@ -717,15 +1028,22 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                                         )}
                                         {item.type === 'ACTIVITY' ? (
                                             <button 
-                                                onClick={() => handleDeleteEvent(item.id)}
-                                                className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg"
+                                                onClick={(e) => initiateDelete(e, 'EVENT', item.id, item.title)}
+                                                className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg cursor-pointer"
                                             >
                                                 <Trash2 size={14} />
                                             </button>
                                         ) : item.type === 'WORKOUT' && !item.originalObj.completed ? (
                                             <button 
-                                                onClick={() => handleDeleteWorkout(item.id, selectedDate)}
-                                                className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg"
+                                                onClick={(e) => initiateDelete(e, 'WORKOUT', item.id, item.title)}
+                                                className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg cursor-pointer"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        ) : item.type === 'MEAL' ? (
+                                            <button 
+                                                onClick={(e) => initiateDelete(e, 'MEAL', item.id, item.title)}
+                                                className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg cursor-pointer"
                                             >
                                                 <Trash2 size={14} />
                                             </button>
@@ -745,42 +1063,167 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
             </div>
         )}
 
+        {/* ... (Keep existing code for PLANS, CREATE, MANUAL_CREATE, Add Event Modal, and Delete Confirmation Modal) */}
+        
         {mode === 'PLANS' && (
             <div className="space-y-4 animate-fade-in">
-                 {DEFAULT_PLANS.map(plan => (
-                     <div key={plan.id} className="bg-white dark:bg-charcoal-800 p-4 rounded-xl border border-gray-200 dark:border-charcoal-700 flex justify-between items-center">
+                 {allPlans.map(plan => (
+                     <div key={plan.id} className="bg-white dark:bg-charcoal-800 p-4 rounded-xl border border-gray-200 dark:border-charcoal-700 flex justify-between items-center group relative">
                          <div>
                              <h4 className="font-bold">{plan.title}</h4>
                              <p className="text-xs text-gray-500">{plan.focus}</p>
                          </div>
-                         <button 
-                            onClick={async () => {
-                                const newSchedule = [...schedule, { date: selectedDate, planId: plan.id, completed: false }];
-                                setSchedule(newSchedule);
-                                await apiSaveSchedule(newSchedule);
-                                setMode('TIMETABLE');
-                            }}
-                            className="bg-gray-100 dark:bg-charcoal-700 p-2 rounded-lg hover:bg-neon-green hover:text-charcoal-900 transition-colors"
-                         >
-                             <Plus size={20} />
-                         </button>
+                         <div className="flex items-center gap-2 z-20">
+                             <button 
+                                onClick={(e) => handleEditPlan(e, plan)}
+                                className="p-2 text-gray-400 hover:text-neon-blue rounded-lg transition-colors cursor-pointer"
+                                title="編輯"
+                                type="button"
+                             >
+                                 <Pencil size={18} />
+                             </button>
+                             <button 
+                                onClick={(e) => initiateDelete(e, 'PLAN', plan.id, plan.title)}
+                                className="p-2 text-gray-400 hover:text-red-500 rounded-lg transition-colors cursor-pointer"
+                                title="刪除"
+                                type="button"
+                             >
+                                 <Trash2 size={18} />
+                             </button>
+                             <button 
+                                onClick={async (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const newSchedule = [...schedule, { date: selectedDate, planId: plan.id, completed: false }];
+                                    setSchedule(newSchedule);
+                                    await apiSaveSchedule(newSchedule);
+                                    setMode('TIMETABLE');
+                                }}
+                                className="bg-gray-100 dark:bg-charcoal-700 p-2 rounded-lg hover:bg-neon-green hover:text-charcoal-900 transition-colors ml-2 cursor-pointer"
+                                title="加入行程"
+                                type="button"
+                             >
+                                 <Plus size={20} />
+                             </button>
+                         </div>
                      </div>
                  ))}
                  
-                 <button 
-                    onClick={() => setMode('CREATE')}
-                    className="w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-charcoal-600 text-gray-500 font-bold flex items-center justify-center gap-2 hover:border-cta-orange hover:text-cta-orange transition-colors"
-                 >
-                     <Sparkles size={20} /> AI 建立新課表
-                 </button>
+                 <div className="grid grid-cols-2 gap-4">
+                     <button 
+                        onClick={() => {
+                            setEditingPlanId(null);
+                            setManualPlanTitle('');
+                            setManualExercises([]);
+                            setMode('MANUAL_CREATE');
+                        }}
+                        className="w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-charcoal-600 text-gray-500 font-bold flex flex-col items-center justify-center gap-2 hover:border-neon-blue hover:text-neon-blue transition-colors"
+                        type="button"
+                     >
+                         <PenTool size={20} /> 手動建立課表
+                     </button>
+                     <button 
+                        onClick={() => setMode('CREATE')}
+                        className="w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-charcoal-600 text-gray-500 font-bold flex flex-col items-center justify-center gap-2 hover:border-cta-orange hover:text-cta-orange transition-colors"
+                        type="button"
+                     >
+                         <Sparkles size={20} /> AI 智慧排課
+                     </button>
+                 </div>
             </div>
         )}
 
+        {/* Unified Delete Confirmation Modal */}
+        {deleteConfirmation.isOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+                <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
+                    <div className="flex flex-col items-center text-center mb-6">
+                        <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-3 text-red-500">
+                            <Trash2 size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">確認刪除？</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                            您確定要刪除{deleteConfirmation.type === 'PLAN' ? '課表' : deleteConfirmation.type === 'MEAL' ? '飲食記錄' : '項目'}「<span className="font-bold text-gray-800 dark:text-gray-200">{deleteConfirmation.title}</span>」嗎？<br/>此動作無法復原。
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => setDeleteConfirmation({ isOpen: false, type: 'PLAN', id: null, title: '' })}
+                            className="flex-1 py-2.5 rounded-xl font-bold bg-gray-100 dark:bg-charcoal-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-charcoal-600 transition-colors"
+                        >
+                            取消
+                        </button>
+                        <button 
+                            onClick={executeDelete}
+                            className="flex-1 py-2.5 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+                        >
+                            確認刪除
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Manual Plan Creator */}
+        {mode === 'MANUAL_CREATE' && (
+            <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in space-y-6">
+                <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-lg flex items-center gap-2">
+                        <PenTool className="text-neon-blue" /> {editingPlanId ? '編輯課表' : '手動建立課表'}
+                    </h3>
+                    <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">課表名稱</label>
+                    <input 
+                        type="text" 
+                        value={manualPlanTitle} 
+                        onChange={e => setManualPlanTitle(e.target.value)}
+                        placeholder="例如: 腿部轟炸日"
+                        className="w-full p-3 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue"
+                    />
+                </div>
+
+                {['warmup', 'main', 'core'].map((section) => (
+                    <div key={section} className="space-y-2">
+                        <div className="flex justify-between items-center bg-gray-100 dark:bg-charcoal-900 p-2 rounded-lg">
+                            <h4 className="text-sm font-bold uppercase text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                                {section === 'warmup' ? <><Flame size={14} className="text-orange-400"/> 熱身</> : section === 'main' ? <><Dumbbell size={14} className="text-neon-blue"/> 主訓練</> : <><RotateCcw size={14} className="text-purple-400"/> 核心</>}
+                            </h4>
+                            <button onClick={() => addManualExercise(section as any)} className="text-xs bg-white dark:bg-charcoal-800 px-2 py-1 rounded shadow-sm hover:text-neon-blue border border-gray-200 dark:border-charcoal-700"><Plus size={12} /></button>
+                        </div>
+                        
+                        {manualExercises.filter(e => e.section === section).map((ex, idx) => {
+                            // Find actual index in main array
+                            const actualIdx = manualExercises.indexOf(ex);
+                            return (
+                                <div key={actualIdx} className="grid grid-cols-12 gap-2 items-center">
+                                    <input type="text" placeholder="動作名稱" value={ex.name} onChange={e => updateManualExercise(actualIdx, 'name', e.target.value)} className="col-span-5 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs outline-none focus:border-neon-blue"/>
+                                    <input type="number" placeholder="kg" value={ex.weight} onChange={e => updateManualExercise(actualIdx, 'weight', parseFloat(e.target.value))} className="col-span-2 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs text-center outline-none focus:border-neon-blue"/>
+                                    <input type="number" placeholder="組" value={ex.sets} onChange={e => updateManualExercise(actualIdx, 'sets', parseInt(e.target.value))} className="col-span-2 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs text-center outline-none focus:border-neon-blue"/>
+                                    <input type="text" placeholder="次" value={ex.reps} onChange={e => updateManualExercise(actualIdx, 'reps', e.target.value)} className="col-span-2 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs text-center outline-none focus:border-neon-blue"/>
+                                    <button onClick={() => removeManualExercise(actualIdx)} className="col-span-1 flex justify-center text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
+                                </div>
+                            );
+                        })}
+                        {manualExercises.filter(e => e.section === section).length === 0 && <div className="text-xs text-gray-400 text-center py-2">無動作</div>}
+                    </div>
+                ))}
+
+                <button onClick={handleSaveManualPlan} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-transform mt-4 flex items-center justify-center gap-2">
+                    <Save size={18} />
+                    {editingPlanId ? '更新課表' : '儲存課表'}
+                </button>
+            </div>
+        )}
+
+        {/* AI Creator */}
         {mode === 'CREATE' && (
             <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-lg flex items-center gap-2"><Sparkles className="text-cta-orange" /> AI 智慧排課</h3>
-                    <button onClick={() => setMode('TIMETABLE')}><X size={20} className="text-gray-400"/></button>
+                    <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
                 </div>
                 <div className="space-y-4">
                     <div className="text-xs text-gray-500 bg-gray-100 dark:bg-charcoal-900 p-2 rounded flex items-center gap-2">
@@ -843,7 +1286,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                                     value={selectedPlanId}
                                     onChange={(e) => setSelectedPlanId(e.target.value)}
                                 >
-                                    {DEFAULT_PLANS.map(plan => (
+                                    {allPlans.map(plan => (
                                         <option key={plan.id} value={plan.id}>{plan.title} ({plan.focus})</option>
                                     ))}
                                 </select>
