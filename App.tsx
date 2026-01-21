@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, NutritionLog, UserProfile, WorkoutRecord } from './types';
 import { NUTRITION_LOGS, MOCK_HISTORY } from './constants';
-import { apiGetUserProfile, apiSaveUserProfile, apiGetWorkoutHistory, apiSaveWorkoutRecord, apiGetNutritionLogs, apiSyncNutritionState } from './lib/db';
+import { apiGetUserProfile, apiSaveUserProfile, apiGetWorkoutHistory, apiSaveWorkoutRecord, apiGetNutritionLogs, apiSyncNutritionState, apiDeleteWorkoutRecord } from './lib/db';
 import { auth, onAuthStateChanged, signOut } from './lib/firebase'; // Updated import to include signOut
 
 import Layout from './components/Layout';
@@ -119,6 +119,14 @@ const App: React.FC = () => {
       setCurrentView(View.HISTORY);
   };
 
+  const handleDeleteRecord = async (recordId: string) => {
+      if(window.confirm("確定要刪除這筆訓練記錄嗎？")) {
+          const newHistory = historyLogs.filter(h => h.id !== recordId);
+          setHistoryLogs(newHistory);
+          await apiDeleteWorkoutRecord(recordId);
+      }
+  };
+
   const handleGoToSettings = () => {
       setCurrentView(View.SETTINGS);
   };
@@ -170,7 +178,7 @@ const App: React.FC = () => {
           />
         );
       case View.HISTORY:
-        return <History logs={historyLogs} />;
+        return <History logs={historyLogs} onDeleteRecord={handleDeleteRecord} />;
       case View.WORKOUT:
         return (
           <Workout 
@@ -183,7 +191,7 @@ const App: React.FC = () => {
           />
         );
       case View.PROGRESS:
-        return <Progress />;
+        return <Progress historyLogs={historyLogs} />;
       case View.NUTRITION:
         return (
           <Nutrition 

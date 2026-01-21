@@ -80,6 +80,25 @@ export const apiSaveWorkoutRecord = async (record: WorkoutRecord): Promise<void>
     }
 };
 
+export const apiDeleteWorkoutRecord = async (recordId: string): Promise<void> => {
+    // Local Update
+    const current = localStorage.getItem('fitlife_history');
+    if (current) {
+        const history = JSON.parse(current);
+        const newHistory = history.filter((r: WorkoutRecord) => r.id !== recordId);
+        localStorage.setItem('fitlife_history', JSON.stringify(newHistory));
+    }
+
+    // Cloud Update
+    if (isCloudEnabled() && auth.currentUser) {
+        try {
+            await deleteDoc(doc(db, `users/${auth.currentUser.uid}/workouts`, recordId));
+        } catch (e) {
+            console.error("Cloud delete workout error", e);
+        }
+    }
+};
+
 // --- NUTRITION LOGS ---
 export const apiGetNutritionLogs = async (): Promise<NutritionLog[]> => {
     if (isCloudEnabled() && auth.currentUser) {

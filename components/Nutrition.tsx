@@ -13,6 +13,18 @@ interface NutritionProps {
   onGoToSettings: () => void;
 }
 
+// Utility to clean JSON string from Markdown blocks
+const cleanJson = (text: string) => {
+    if (!text) return "{}";
+    let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const firstBrace = clean.indexOf('{');
+    const lastBrace = clean.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+        clean = clean.substring(firstBrace, lastBrace + 1);
+    }
+    return clean;
+};
+
 const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoToSettings }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -153,7 +165,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
 
       const data = await response.json();
       const content = data.choices[0].message.content;
-      return JSON.parse(content);
+      return JSON.parse(cleanJson(content));
   };
 
   const callGemini = async () => {
@@ -181,7 +193,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                 }
             }
         });
-      return JSON.parse(response.text || "{}");
+      return JSON.parse(cleanJson(response.text || "{}"));
   };
 
   const handleAnalyzeFood = async () => {

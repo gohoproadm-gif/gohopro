@@ -1,12 +1,14 @@
+
 import React, { useState, useMemo } from 'react';
 import { WorkoutRecord } from '../types';
-import { Calendar, CheckCircle, Clock, Flame, Filter, Inbox, ChevronDown, ChevronUp, Dumbbell } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, Flame, Filter, Inbox, ChevronDown, ChevronUp, Dumbbell, Trash2 } from 'lucide-react';
 
 interface HistoryProps {
     logs: WorkoutRecord[];
+    onDeleteRecord?: (id: string) => void;
 }
 
-const History: React.FC<HistoryProps> = ({ logs }) => {
+const History: React.FC<HistoryProps> = ({ logs, onDeleteRecord }) => {
   const [filterDate, setFilterDate] = useState<string>('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -81,7 +83,7 @@ const History: React.FC<HistoryProps> = ({ logs }) => {
 
                 {/* Expanded Details */}
                 {expandedId === record.id && (
-                    <div className="bg-gray-50 dark:bg-charcoal-900 border-t border-gray-100 dark:border-charcoal-700 p-4 animate-fade-in">
+                    <div className="bg-gray-50 dark:bg-charcoal-900 border-t border-gray-100 dark:border-charcoal-700 p-4 animate-fade-in relative">
                         {record.details && record.details.length > 0 ? (
                             <div className="space-y-4">
                                 {record.details.map((exercise, idx) => (
@@ -105,6 +107,20 @@ const History: React.FC<HistoryProps> = ({ logs }) => {
                             </div>
                         ) : (
                             <p className="text-sm text-gray-500 text-center py-2">無詳細訓練數據</p>
+                        )}
+                        
+                        {onDeleteRecord && (
+                            <div className="mt-6 flex justify-end">
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onDeleteRecord(record.id);
+                                    }}
+                                    className="flex items-center gap-1 text-xs text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-2 rounded-lg transition-colors border border-red-200 dark:border-red-900/30"
+                                >
+                                    <Trash2 size={14} /> 刪除此記錄
+                                </button>
+                            </div>
                         )}
                     </div>
                 )}

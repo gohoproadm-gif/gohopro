@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download } from 'lucide-react';
+import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download, Bot, Key, Globe, Cpu } from 'lucide-react';
 
 interface ProfileSettingsProps {
   userProfile: UserProfile;
@@ -170,6 +170,91 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
             </div>
         </div>
 
+        {/* AI Configuration Section */}
+        <div className="space-y-6">
+            <h3 className="text-lg font-bold border-b border-gray-100 dark:border-charcoal-700 pb-2 flex items-center gap-2">
+                <Bot size={20} className="text-neon-purple" /> AI 模型設定
+            </h3>
+            
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">AI 供應商</label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button 
+                            onClick={() => setProfile({...profile, aiProvider: 'google'})}
+                            className={`p-3 rounded-xl border flex items-center justify-center gap-2 font-bold transition-all ${
+                                (profile.aiProvider === 'google' || !profile.aiProvider) 
+                                ? 'border-neon-blue bg-neon-blue/10 text-neon-blue' 
+                                : 'border-gray-200 dark:border-charcoal-600 bg-gray-50 dark:bg-charcoal-900 text-gray-500'
+                            }`}
+                        >
+                            Google Gemini
+                        </button>
+                        <button 
+                            onClick={() => setProfile({...profile, aiProvider: 'openai'})}
+                            className={`p-3 rounded-xl border flex items-center justify-center gap-2 font-bold transition-all ${
+                                profile.aiProvider === 'openai' 
+                                ? 'border-neon-purple bg-neon-purple/10 text-neon-purple' 
+                                : 'border-gray-200 dark:border-charcoal-600 bg-gray-50 dark:bg-charcoal-900 text-gray-500'
+                            }`}
+                        >
+                            OpenAI / DeepSeek
+                        </button>
+                    </div>
+                </div>
+
+                {profile.aiProvider === 'openai' && (
+                    <div className="space-y-4 bg-gray-50 dark:bg-charcoal-900/50 p-4 rounded-xl border border-gray-200 dark:border-charcoal-700 animate-fade-in">
+                        <div>
+                            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 mb-1">
+                                <Globe size={14} /> Base URL
+                            </label>
+                            <input 
+                                type="text" 
+                                value={profile.openaiBaseUrl || ''}
+                                onChange={(e) => setProfile({...profile, openaiBaseUrl: e.target.value})}
+                                placeholder="例如: https://api.deepseek.com"
+                                className="w-full p-2.5 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-600 outline-none focus:border-neon-purple text-sm font-mono"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">DeepSeek 請填: https://api.deepseek.com</p>
+                        </div>
+                        <div>
+                            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 mb-1">
+                                <Key size={14} /> API Key
+                            </label>
+                            <input 
+                                type="password" 
+                                value={profile.openaiApiKey || ''}
+                                onChange={(e) => setProfile({...profile, openaiApiKey: e.target.value})}
+                                placeholder="sk-..."
+                                className="w-full p-2.5 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-600 outline-none focus:border-neon-purple text-sm font-mono"
+                            />
+                        </div>
+                        <div>
+                            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 mb-1">
+                                <Cpu size={14} /> Model Name
+                            </label>
+                            <input 
+                                type="text" 
+                                value={profile.openaiModel || ''}
+                                onChange={(e) => setProfile({...profile, openaiModel: e.target.value})}
+                                placeholder="例如: deepseek-chat 或 gpt-4o"
+                                className="w-full p-2.5 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-600 outline-none focus:border-neon-purple text-sm font-mono"
+                            />
+                        </div>
+                    </div>
+                )}
+                
+                {(profile.aiProvider === 'google' || !profile.aiProvider) && (
+                     <div className="bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg">
+                         <p className="text-xs text-blue-600 dark:text-blue-300">
+                             預設使用 Google Gemini 免費模型。若要使用高級功能，請確保系統環境變數已設定 API Key。
+                         </p>
+                     </div>
+                )}
+            </div>
+        </div>
+
         {/* Buttons */}
         <div className="pt-6 border-t border-gray-200 dark:border-charcoal-700 flex flex-col md:flex-row gap-4">
             <button 
@@ -206,7 +291,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
       </div>
       
       <div className="text-center text-xs text-gray-400">
-          Gohopro v1.2.0
+          Gohopro v1.3.0
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { DEFAULT_PLANS, HK_HOLIDAYS } from '../constants';
 import { DailyPlan, ScheduledWorkout, WorkoutRecord, ExerciseSetLog, CalendarEvent, NutritionLog, UserProfile } from '../types';
-import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings } from 'lucide-react';
+import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings, Minus, RefreshCw, RotateCcw } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { apiGetSchedule, apiSaveSchedule, apiGetEvents, apiSaveEvent, apiDeleteEvent, apiGetNutritionLogs } from '../lib/db';
 
@@ -50,6 +50,18 @@ const playBeep = (count: number = 1) => {
     if (navigator.vibrate) {
         navigator.vibrate(Array(count).fill(100));
     }
+};
+
+// Utility to clean JSON string from Markdown blocks
+const cleanJson = (text: string) => {
+    if (!text) return "{}";
+    let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const firstBrace = clean.indexOf('{');
+    const lastBrace = clean.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+        clean = clean.substring(firstBrace, lastBrace + 1);
+    }
+    return clean;
 };
 
 const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFinishWorkout, historyLogs = [], userProfile, onGoToSettings }) => {
@@ -117,17 +129,40 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
       return () => clearInterval(interval);
   }, [isResting, restTimer]);
 
+  // --- Smart Pre-fill Logic ---
+  const findLastSessionStats = (exerciseName: string) => {
+      for (const record of historyLogs) {
+          if (!record.details) continue;
+          const match = record.details.find(d => d.exerciseName === exerciseName);
+          // Find the best set (highest weight) or just the last working set
+          if (match && match.sets.length > 0) {
+              const completedSets = match.sets.filter(s => s.completed && s.weight > 0);
+              if (completedSets.length > 0) {
+                  // Return the heavyest set to encourage progressive overload, or just the last set
+                  // Let's return the last completed set to be safe
+                  return completedSets[completedSets.length - 1];
+              }
+          }
+      }
+      return null;
+  };
+
   const handleStartSession = (plan: DailyPlan) => {
       setActivePlan(plan);
       setSessionStartTime(Date.now());
       
       const initialLogs: Record<string, ExerciseSetLog[]> = {};
+      
       plan.exercises.forEach(ex => {
-          // Try to pre-fill weights from history if possible? (Optional enhancement, keeping it simple for now)
-          initialLogs[ex.id] = Array(ex.sets).fill({ setNumber: 0, weight: 0, reps: 0, completed: false }).map((_, i) => ({
+          // Check history for pre-fill
+          const lastStats = findLastSessionStats(ex.name);
+          const defaultWeight = lastStats ? lastStats.weight : (ex.weight || 0);
+          const defaultReps = lastStats ? lastStats.reps : (parseInt(ex.reps) || 10);
+
+          initialLogs[ex.id] = Array(ex.sets).fill(null).map((_, i) => ({
               setNumber: i + 1,
-              weight: ex.weight || 0,
-              reps: parseInt(ex.reps) || 10,
+              weight: defaultWeight,
+              reps: defaultReps,
               completed: false
           }));
       });
@@ -258,7 +293,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
   const callOpenAI = async () => {
         const { apiKey, baseUrl, model } = getDeepSeekConfig();
 
-        if (!apiKey) throw new Error("API Key 缺失。請聯繫管理員配置環境變數 (VITE_OPENAI_API_KEY)。");
+        if (!apiKey) throw new Error("API Key 缺失。請至設定頁面配置 API Key。");
 
         const systemPrompt = `Create a workout plan based on the request. Return strictly valid JSON with structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12" } ] }`;
 
@@ -284,7 +319,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
         }
 
         const data = await response.json();
-        return JSON.parse(data.choices[0].message.content);
+        return JSON.parse(cleanJson(data.choices[0].message.content));
   };
 
   const callGemini = async () => {
@@ -297,7 +332,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
             contents: `Create a workout plan based on this request: "${aiPrompt}". Return strictly JSON. Structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12" } ] }`,
             config: { responseMimeType: "application/json" }
       });
-      return JSON.parse(response.text || "{}");
+      return JSON.parse(cleanJson(response.text || "{}"));
   };
 
   const handleGeneratePlan = async () => {
@@ -339,7 +374,7 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
           }
       } catch (e: any) {
           if (e.message?.includes("API Key")) {
-               setAiError("生成失敗: API Key 缺失");
+               setAiError("生成失敗: API Key 缺失 (請檢查設定)");
           } else {
                setAiError("生成失敗: " + (e.message || "未知錯誤"));
           }
@@ -371,15 +406,9 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
 
   // Helper to find last performance of an exercise
   const getPreviousPerformance = (exerciseName: string) => {
-      // Search backwards in history
-      for (const record of historyLogs) {
-          if (!record.details) continue;
-          const match = record.details.find(d => d.exerciseName === exerciseName);
-          if (match && match.sets.length > 0) {
-              // Find the heavyest set or just the first working set
-              const bestSet = match.sets.reduce((prev, current) => (prev.weight > current.weight) ? prev : current);
-              return `${record.date}: ${bestSet.weight}kg x ${bestSet.reps}`;
-          }
+      const stats = findLastSessionStats(exerciseName);
+      if (stats) {
+          return `${stats.weight}kg x ${stats.reps}`;
       }
       return null;
   };
@@ -403,42 +432,68 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
   const nextMonth = () => {
       setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   };
+  
+  const goToToday = () => {
+      setCurrentMonth(new Date());
+      setSelectedDate(new Date().toISOString().split('T')[0]);
+  };
 
   const renderCalendarCell = (day: number) => {
-      const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      const dateObj = new Date(year, month, day);
+      
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const isToday = dateStr === new Date().toISOString().split('T')[0];
       const isSelected = dateStr === selectedDate;
       const isHoliday = !!HK_HOLIDAYS[dateStr];
+      const isSunday = dateObj.getDay() === 0;
       const holidayName = HK_HOLIDAYS[dateStr];
       
       const hasWorkout = schedule.some(s => s.date === dateStr);
       const hasNutrition = nutritionLogs.some(n => n.date === dateStr);
       const hasEvent = events.some(e => e.date === dateStr);
 
+      let dayNumberClass = "text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full ";
+      if (isToday) {
+          dayNumberClass += "bg-neon-blue text-charcoal-900";
+      } else if (isHoliday || isSunday) {
+          dayNumberClass += "text-red-500";
+      } else {
+          dayNumberClass += "text-gray-700 dark:text-gray-300";
+      }
+
       return (
           <div 
               key={day} 
               onClick={() => setSelectedDate(dateStr)}
               className={`
-                  relative h-14 md:h-24 border border-gray-100 dark:border-charcoal-700 flex flex-col justify-start items-start p-1 transition-all cursor-pointer
+                  relative h-14 md:h-24 border border-gray-100 dark:border-charcoal-700 flex flex-col justify-between items-start p-1 transition-all cursor-pointer
                   ${isSelected ? 'ring-2 ring-neon-blue z-10' : ''}
-                  ${isHoliday ? 'bg-red-50 dark:bg-red-900/10' : 'bg-white dark:bg-charcoal-800'}
+                  ${isHoliday || isSunday ? 'bg-red-50 dark:bg-red-900/10' : 'bg-white dark:bg-charcoal-800'}
                   hover:bg-gray-50 dark:hover:bg-charcoal-700
               `}
           >
-              <div className="flex justify-between w-full">
-                  <span className={`text-sm font-bold ${isHoliday ? 'text-red-500' : (isToday ? 'bg-neon-blue text-charcoal-900 w-6 h-6 flex items-center justify-center rounded-full' : 'text-gray-700 dark:text-gray-300')}`}>
+              <div className="w-full flex justify-between items-start">
+                  <span className={dayNumberClass}>
                       {day}
                   </span>
-                  {isHoliday && <span className="text-[8px] md:text-[10px] text-red-500 font-bold truncate max-w-[40px] md:max-w-full">{holidayName}</span>}
+                  {/* Indicators moved to top right to save bottom space for holiday name */}
+                  <div className="flex gap-0.5 mt-1">
+                      {hasWorkout && <div className="w-1.5 h-1.5 rounded-full bg-cta-orange" title="Workout"></div>}
+                      {hasNutrition && <div className="w-1.5 h-1.5 rounded-full bg-neon-green" title="Nutrition"></div>}
+                      {hasEvent && <div className="w-1.5 h-1.5 rounded-full bg-neon-blue" title="Activity"></div>}
+                  </div>
               </div>
               
-              {/* Indicators */}
-              <div className="flex flex-wrap gap-1 mt-1">
-                  {hasWorkout && <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-cta-orange" title="Workout"></div>}
-                  {hasNutrition && <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-neon-green" title="Nutrition"></div>}
-                  {hasEvent && <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-neon-blue" title="Activity"></div>}
-              </div>
+              {/* Holiday Name - Centered & Visible */}
+              {isHoliday && (
+                  <div className="w-full text-center mt-auto mb-0.5">
+                      <span className="block text-[9px] md:text-xs text-red-500 font-bold leading-none truncate px-0.5">
+                          {holidayName}
+                      </span>
+                  </div>
+              )}
           </div>
       );
   };
@@ -519,11 +574,13 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                                   <Dumbbell size={18} className="text-neon-blue"/>
                                   {exercise.name}
                               </h3>
-                              {prevStats && (
+                              {prevStats ? (
                                   <div className="text-xs bg-gray-100 dark:bg-charcoal-900 text-gray-500 px-2 py-1 rounded flex items-center gap-1">
                                       <HistoryIcon size={12} />
-                                      上次: {prevStats}
+                                      <span className="font-mono">上次: {prevStats}</span>
                                   </div>
+                              ) : (
+                                  <span className="text-[10px] bg-neon-green/10 text-neon-green px-2 py-1 rounded">新動作</span>
                               )}
                           </div>
                           
@@ -545,13 +602,28 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
               </div>
               {isResting && (
                   <div className="fixed bottom-20 left-4 right-4 bg-charcoal-900 text-white p-4 rounded-xl shadow-2xl flex items-center justify-between z-40 animate-fade-in border border-charcoal-700">
-                      <div><div className="text-xs text-gray-400 font-bold uppercase">Resting</div><div className="text-2xl font-mono font-bold text-cta-orange">{restTimer}s</div></div>
-                      <div className="flex gap-2"><button onClick={() => setRestTimer(t => t + 10)} className="p-2 bg-gray-800 rounded-lg hover:bg-gray-700">+10s</button><button onClick={() => setIsResting(false)} className="p-2 bg-gray-800 rounded-lg hover:bg-gray-700 text-red-400">Skip</button></div>
+                      <div>
+                          <div className="text-xs text-gray-400 font-bold uppercase">Resting</div>
+                          <div className="text-2xl font-mono font-bold text-cta-orange">{restTimer}s</div>
+                      </div>
+                      <div className="flex gap-2">
+                          <button onClick={() => setRestTimer(t => Math.max(0, t - 10))} className="p-2 bg-gray-800 rounded-lg hover:bg-gray-700 flex items-center justify-center w-10">
+                              <Minus size={16} />
+                          </button>
+                          <button onClick={() => setRestTimer(t => t + 30)} className="p-2 bg-gray-800 rounded-lg hover:bg-gray-700 flex items-center justify-center w-10">
+                              <Plus size={16} />
+                          </button>
+                          <button onClick={() => setIsResting(false)} className="px-3 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 text-red-400 font-bold text-sm">
+                              Skip
+                          </button>
+                      </div>
                   </div>
               )}
           </div>
       );
   }
+
+  const isCurrentMonth = currentMonth.getMonth() === new Date().getMonth() && currentMonth.getFullYear() === new Date().getFullYear();
 
   return (
     <div className="space-y-6 pb-20">
@@ -577,14 +649,21 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                 <div className="bg-white dark:bg-charcoal-800 rounded-2xl shadow-sm border border-gray-200 dark:border-charcoal-700 overflow-hidden">
                     <div className="p-4 flex items-center justify-between border-b border-gray-200 dark:border-charcoal-700 bg-gray-50 dark:bg-charcoal-900">
                          <button onClick={prevMonth} className="p-2 hover:bg-gray-200 dark:hover:bg-charcoal-700 rounded-full"><ChevronLeft/></button>
-                         <h3 className="font-bold text-lg">{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</h3>
+                         <div className="flex flex-col items-center">
+                             <h3 className="font-bold text-lg leading-none">{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</h3>
+                             {!isCurrentMonth && (
+                                 <button onClick={goToToday} className="text-[10px] text-neon-blue font-bold flex items-center gap-1 mt-1 hover:underline">
+                                     <RotateCcw size={10} /> 返回今日
+                                 </button>
+                             )}
+                         </div>
                          <button onClick={nextMonth} className="p-2 hover:bg-gray-200 dark:hover:bg-charcoal-700 rounded-full"><ChevronRight/></button>
                     </div>
                     <div className="grid grid-cols-7 text-center text-xs text-gray-400 font-bold py-2 bg-gray-50 dark:bg-charcoal-900">
-                        <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+                        <div className="text-red-500">日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
                     </div>
                     <div className="grid grid-cols-7 bg-gray-200 dark:bg-charcoal-700 gap-px border-b border-gray-200 dark:border-charcoal-700">
-                        {paddingArray.map(i => <div key={`pad-${i}`} className="bg-gray-50 dark:bg-charcoal-850 h-14 md:h-24"></div>)}
+                        {paddingArray.map(i => <div key={`pad-${i}`} className="bg-gray-50 dark:bg-gray-800/50 h-14 md:h-24"></div>)}
                         {daysArray.map(day => renderCalendarCell(day))}
                     </div>
                 </div>
@@ -704,8 +783,14 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                     <button onClick={() => setMode('TIMETABLE')}><X size={20} className="text-gray-400"/></button>
                 </div>
                 <div className="space-y-4">
-                    <div className="text-xs text-gray-500 bg-gray-100 dark:bg-charcoal-900 p-2 rounded">
-                        使用模型: <span className="font-bold">{userProfile.aiProvider === 'openai' || process.env.NEXT_PUBLIC_OPENAI_API_KEY ? 'DeepSeek/OpenAI' : 'Google Gemini'}</span>
+                    <div className="text-xs text-gray-500 bg-gray-100 dark:bg-charcoal-900 p-2 rounded flex items-center gap-2">
+                        <span className="shrink-0">使用模型:</span>
+                        <span className={`font-bold px-2 py-0.5 rounded ${userProfile.aiProvider === 'openai' ? 'bg-neon-purple/10 text-neon-purple' : 'bg-neon-blue/10 text-neon-blue'}`}>
+                            {userProfile.aiProvider === 'openai' ? 'OpenAI / DeepSeek' : 'Google Gemini'}
+                        </span>
+                        {userProfile.aiProvider === 'openai' && !userProfile.openaiApiKey && (
+                            <span className="text-red-500 text-[10px] ml-auto flex items-center gap-1"><AlertTriangle size={10}/> 未設定 API Key</span>
+                        )}
                     </div>
                     <textarea value={aiPrompt} onChange={(e) => { setAiPrompt(e.target.value); setAiError(null); }} placeholder="例如：我只有30分鐘，想練胸肌和三頭肌..." className="w-full h-32 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange resize-none" />
                     {aiError && (
@@ -714,6 +799,9 @@ const Workout: React.FC<WorkoutProps> = ({ autoStart, onAutoStartConsumed, onFin
                                 <AlertTriangle size={14} className="shrink-0" />
                                 <span>{aiError}</span>
                             </div>
+                            {aiError.includes("設定") && (
+                                <button onClick={onGoToSettings} className="underline font-bold text-red-600 dark:text-red-400">前往設定</button>
+                            )}
                         </div>
                     )}
                     <button onClick={handleGeneratePlan} disabled={isGenerating || !aiPrompt.trim()} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">{isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}{isGenerating ? 'AI 思考中...' : '生成課表'}</button>

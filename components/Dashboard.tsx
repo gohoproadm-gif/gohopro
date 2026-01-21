@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Activity, Flame, Clock, Trophy, User, ArrowRight, Target, Droplets, Plus, Minus } from 'lucide-react';
+import { Activity, Flame, Clock, Trophy, User, ArrowRight, Target, Droplets, Plus, Minus, Edit2, X, Save } from 'lucide-react';
 import { MOTIVATIONAL_QUOTES, DEFAULT_PLANS } from '../constants';
 import { NutritionLog, UserProfile, ScheduledWorkout, DailyPlan } from '../types';
 
@@ -24,19 +24,34 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
   const [waterIntake, setWaterIntake] = useState(0);
   const dailyWaterGoal = 2500; // ml
 
+  // Steps Tracker State
+  const [steps, setSteps] = useState(0);
+  const [showStepsModal, setShowStepsModal] = useState(false);
+  const [tempSteps, setTempSteps] = useState(0);
+
   useEffect(() => {
+      // Load Water
       const savedWater = localStorage.getItem(`water_${todayStr}`);
-      if (savedWater) {
-          setWaterIntake(parseInt(savedWater));
-      } else {
-          setWaterIntake(0);
-      }
+      if (savedWater) setWaterIntake(parseInt(savedWater));
+      else setWaterIntake(0);
+
+      // Load Steps
+      const savedSteps = localStorage.getItem(`steps_${todayStr}`);
+      if (savedSteps) setSteps(parseInt(savedSteps));
+      else setSteps(0);
+
   }, [todayStr]);
 
   const updateWater = (amount: number) => {
       const newVal = Math.max(0, waterIntake + amount);
       setWaterIntake(newVal);
       localStorage.setItem(`water_${todayStr}`, newVal.toString());
+  };
+
+  const handleSaveSteps = () => {
+      setSteps(tempSteps);
+      localStorage.setItem(`steps_${todayStr}`, tempSteps.toString());
+      setShowStepsModal(false);
   };
 
   useEffect(() => {
@@ -163,10 +178,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
                 <span className="text-lg font-bold">{totalNutrition.calories}</span>
                 <span className="text-[10px] text-gray-500">攝取卡路里</span>
               </div>
-              <div className="bg-gray-50 dark:bg-charcoal-900 p-3 rounded-xl flex flex-col items-center">
-                <Activity className="text-neon-blue mb-1" size={20} />
-                <span className="text-lg font-bold">5,432</span>
-                <span className="text-[10px] text-gray-500">今日步數</span>
+              <div 
+                onClick={() => { setTempSteps(steps); setShowStepsModal(true); }}
+                className="bg-gray-50 dark:bg-charcoal-900 p-3 rounded-xl flex flex-col items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-charcoal-700 transition-colors group"
+              >
+                <Activity className="text-neon-blue mb-1 group-hover:scale-110 transition-transform" size={20} />
+                <span className="text-lg font-bold">{steps.toLocaleString()}</span>
+                <span className="text-[10px] text-gray-500 flex items-center gap-1">今日步數 <Edit2 size={8}/></span>
               </div>
                <div className="bg-gray-50 dark:bg-charcoal-900 p-3 rounded-xl flex flex-col items-center">
                  <Trophy className="text-yellow-400 mb-1" size={20} />
@@ -203,7 +221,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
               </div>
 
               {/* Water Tracker Widget */}
-              <div className="bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl p-6 shadow-lg text-white relative overflow-hidden">
+              <div className="bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl p-6 shadow-lg text-white relative overflow-hidden group">
                    <div className="relative z-10">
                         <div className="flex justify-between items-start mb-4">
                             <h3 className="font-bold text-lg flex items-center gap-2"><Droplets size={20}/> 飲水追蹤</h3>
@@ -224,8 +242,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
                              </button>
                         </div>
                    </div>
-                   {/* Decorative Wave */}
-                   <div className="absolute bottom-0 left-0 right-0 h-24 bg-white/10" style={{ clipPath: 'polygon(0% 100%, 100% 100%, 100% 60%, 75% 75%, 50% 60%, 25% 75%, 0% 60%)' }}></div>
+                   {/* Decorative Wave with Animation */}
+                   <div className="absolute bottom-0 left-0 right-0 h-24 bg-white/10 animate-wave" style={{ 
+                       clipPath: 'polygon(0% 100%, 100% 100%, 100% 60%, 75% 75%, 50% 60%, 25% 75%, 0% 60%)',
+                       backgroundSize: '100% 100%' 
+                   }}></div>
+                   <div className="absolute bottom-0 left-0 right-0 h-24 bg-white/5 animate-wave" style={{ 
+                       clipPath: 'polygon(0% 100%, 100% 100%, 100% 65%, 75% 80%, 50% 65%, 25% 80%, 0% 65%)',
+                       animationDuration: '7s',
+                       animationDelay: '-2s'
+                   }}></div>
               </div>
           </div>
       </div>
@@ -258,6 +284,35 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
             )}
         </div>
       </div>
+
+      {/* Steps Edit Modal */}
+      {showStepsModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-lg font-bold flex items-center gap-2"><Activity className="text-neon-blue"/> 編輯步數</h3>
+                      <button onClick={() => setShowStepsModal(false)}><X size={20} className="text-gray-400"/></button>
+                  </div>
+                  
+                  <div className="space-y-6">
+                      <div className="flex items-center justify-center gap-4">
+                          <button onClick={() => setTempSteps(Math.max(0, tempSteps - 100))} className="p-3 bg-gray-100 dark:bg-charcoal-900 rounded-full"><Minus size={20}/></button>
+                          <input 
+                              type="number" 
+                              value={tempSteps} 
+                              onChange={(e) => setTempSteps(parseInt(e.target.value) || 0)} 
+                              className="w-28 text-center text-3xl font-bold bg-transparent outline-none border-b-2 border-gray-200 dark:border-charcoal-600 focus:border-neon-blue" 
+                          />
+                          <button onClick={() => setTempSteps(tempSteps + 100)} className="p-3 bg-gray-100 dark:bg-charcoal-900 rounded-full"><Plus size={20}/></button>
+                      </div>
+                      
+                      <button onClick={handleSaveSteps} className="w-full bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+                          <Save size={18}/> 儲存
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

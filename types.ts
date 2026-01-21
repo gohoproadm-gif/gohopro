@@ -123,4 +123,5 @@ export interface Tutorial {
   description: string;
   tips: string[];
   animationType: AnimationCategory;
+  image?: string; // Static image URL or path
 }
