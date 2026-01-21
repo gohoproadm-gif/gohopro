@@ -10,7 +10,7 @@ const isCloudEnabled = () => !!db && !!auth?.currentUser;
 // --- SYSTEM KEYS (CLOUD SYNC) ---
 export const apiGetSystemKeys = async (): Promise<any> => {
     // Allows any authenticated user to READ the system config (assuming Firestore rules allow it)
-    if (!!db && !!auth) {
+    if (!!db) {
         try {
             const docRef = doc(db, "system", "config");
             const docSnap = await getDoc(docRef);

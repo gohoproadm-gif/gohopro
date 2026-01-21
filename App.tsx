@@ -83,6 +83,7 @@ const App: React.FC = () => {
               // Real User Data
               
               // 1. Fetch System Keys first (if available in cloud, sync to local)
+              // This allows normal users to access keys set by admin
               const systemKeys = await apiGetSystemKeys();
               if (systemKeys) {
                   if (systemKeys.googleApiKey) localStorage.setItem('GO_SYSTEM_GOOGLE_API_KEY', systemKeys.googleApiKey);
