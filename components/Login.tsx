@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from '../lib/firebase';
+import { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, signInAnonymously } from '../lib/firebase';
 import { Dumbbell, Mail, Lock, LogIn, UserPlus, AlertCircle, ArrowRight, Activity, Chrome, HelpCircle, X, CheckCircle, Send, ExternalLink, ShieldCheck } from 'lucide-react';
 
 interface LoginProps {
@@ -28,6 +28,16 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     // --- SUPER ADMIN LOGIN CHECK ---
     if (email === 'admin' && password === 'gohoproadmin') {
         setLoading(true);
+        try {
+            // Attempt to sign in anonymously to get a valid Firebase UID/Token
+            // This ensures Firestore rules (request.auth != null) pass when saving system keys
+            if (auth) {
+                await signInAnonymously(auth);
+            }
+        } catch (e) {
+            console.warn("Admin anonymous login failed, features requiring DB write might fail.", e);
+        }
+        
         // Simulate network delay for better UX
         setTimeout(() => {
             setLoading(false);

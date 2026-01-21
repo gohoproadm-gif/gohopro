@@ -5,6 +5,7 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signInWithPopup, 
+  signInAnonymously, // Added this
   GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut,
@@ -56,10 +57,11 @@ export {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signInWithPopup, 
+  signInAnonymously, // Exported
   GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut,
-  sendPasswordResetEmail, // Exported for Forgot Password feature
+  sendPasswordResetEmail, 
   doc, 
   getDoc, 
   setDoc, 

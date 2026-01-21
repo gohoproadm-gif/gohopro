@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download, Bot, Key, Globe, Cpu, ShieldAlert, Check } from 'lucide-react';
+import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download, Bot, Key, Globe, Cpu, ShieldAlert, Check, Sparkles } from 'lucide-react';
 import { apiSaveSystemKeys } from '../lib/db';
 
 interface ProfileSettingsProps {
@@ -68,6 +68,11 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
       reader.readAsDataURL(file);
     }
   };
+  
+  const fillDeepSeekDefaults = () => {
+      setSystemOpenAIBaseUrl("https://api.deepseek.com");
+      setSystemOpenAIModel("deepseek-chat");
+  };
 
   const handleSave = async () => {
     if (isAdmin) {
@@ -87,7 +92,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
             });
         } catch (e) {
             console.error("Failed to sync keys to cloud (requires auth)", e);
-            alert("本地儲存成功，但雲端同步失敗。若需同步給其他用戶，請確保您已登入 Firebase 帳戶並擁有寫入權限。");
+            alert("本地儲存成功，但雲端同步失敗。請嘗試重新登入 Admin 帳號（系統會自動進行匿名驗證以取得寫入權限）。");
         }
     } else {
         // Normal Save
@@ -254,14 +259,22 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
 
                 {/* Only Admin can see and edit the actual Keys */}
                 {isAdmin && (
-                    <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 p-4 rounded-xl space-y-4">
-                        <div className="flex items-center gap-2 text-red-500 font-bold text-sm mb-2">
-                            <ShieldAlert size={18}/> 系統全域 API Key 設定 (僅管理員可見)
+                    <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 p-4 rounded-xl space-y-4 relative">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 text-red-500 font-bold text-sm">
+                                <ShieldAlert size={18}/> 系統全域 API Key 設定 (僅管理員可見)
+                            </div>
+                            <button 
+                                onClick={fillDeepSeekDefaults}
+                                className="text-[10px] bg-neon-purple/20 hover:bg-neon-purple/30 text-neon-purple px-2 py-1 rounded flex items-center gap-1 font-bold transition-colors"
+                            >
+                                <Sparkles size={10} /> 一鍵填入 DeepSeek 預設值
+                            </button>
                         </div>
                         
                         <div className="space-y-3">
                             <div>
-                                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Google Gemini API Key</label>
+                                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Google Gemini API Key <span className="text-red-500">*</span></label>
                                 <input 
                                     type="text" 
                                     value={systemGoogleKey}
