@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from '../types';
 import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download, Bot, Key, Globe, Cpu, ShieldAlert, Check } from 'lucide-react';
+import { apiSaveSystemKeys } from '../lib/db';
 
 interface ProfileSettingsProps {
   userProfile: UserProfile;
@@ -68,13 +69,26 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (isAdmin) {
-        // Save System Keys
+        // Save System Keys Locally
         localStorage.setItem('GO_SYSTEM_GOOGLE_API_KEY', systemGoogleKey);
         localStorage.setItem('GO_SYSTEM_OPENAI_API_KEY', systemOpenAIKey);
         localStorage.setItem('GO_SYSTEM_OPENAI_BASE_URL', systemOpenAIBaseUrl);
         localStorage.setItem('GO_SYSTEM_OPENAI_MODEL', systemOpenAIModel);
+
+        // Save System Keys to Cloud (so all users get them)
+        try {
+            await apiSaveSystemKeys({
+                googleApiKey: systemGoogleKey,
+                openaiApiKey: systemOpenAIKey,
+                openaiBaseUrl: systemOpenAIBaseUrl,
+                openaiModel: systemOpenAIModel
+            });
+        } catch (e) {
+            console.error("Failed to sync keys to cloud (requires auth)", e);
+            alert("本地儲存成功，但雲端同步失敗。若需同步給其他用戶，請確保您已登入 Firebase 帳戶並擁有寫入權限。");
+        }
     } else {
         // Normal Save
         onUpdateProfile(profile);
@@ -311,7 +325,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                 className="flex-1 bg-cta-orange hover:bg-cta-hover text-white font-bold py-4 rounded-xl shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
             >
                 <Save size={20} />
-                {isAdmin ? '儲存系統設定' : '儲存變更'}
+                {isAdmin ? '儲存系統設定 (同步至所有用戶)' : '儲存變更'}
             </button>
             
             {onLogout && (

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, NutritionLog, UserProfile, WorkoutRecord } from './types';
 import { NUTRITION_LOGS, MOCK_HISTORY, USER_PROFILE } from './constants';
-import { apiGetUserProfile, apiSaveUserProfile, apiGetWorkoutHistory, apiSaveWorkoutRecord, apiGetNutritionLogs, apiSyncNutritionState, apiDeleteWorkoutRecord, apiDeleteNutritionLog } from './lib/db';
+import { apiGetUserProfile, apiSaveUserProfile, apiGetWorkoutHistory, apiSaveWorkoutRecord, apiGetNutritionLogs, apiSyncNutritionState, apiDeleteWorkoutRecord, apiDeleteNutritionLog, apiGetSystemKeys } from './lib/db';
 import { auth, onAuthStateChanged, signOut } from './lib/firebase'; // Updated import to include signOut
 
 import Layout from './components/Layout';
@@ -81,6 +81,17 @@ const App: React.FC = () => {
               setNutritionLogs(NUTRITION_LOGS);
           } else {
               // Real User Data
+              
+              // 1. Fetch System Keys first (if available in cloud, sync to local)
+              const systemKeys = await apiGetSystemKeys();
+              if (systemKeys) {
+                  if (systemKeys.googleApiKey) localStorage.setItem('GO_SYSTEM_GOOGLE_API_KEY', systemKeys.googleApiKey);
+                  if (systemKeys.openaiApiKey) localStorage.setItem('GO_SYSTEM_OPENAI_API_KEY', systemKeys.openaiApiKey);
+                  if (systemKeys.openaiBaseUrl) localStorage.setItem('GO_SYSTEM_OPENAI_BASE_URL', systemKeys.openaiBaseUrl);
+                  if (systemKeys.openaiModel) localStorage.setItem('GO_SYSTEM_OPENAI_MODEL', systemKeys.openaiModel);
+              }
+
+              // 2. Fetch User Data
               const profile = await apiGetUserProfile();
               setUserProfile(profile);
 

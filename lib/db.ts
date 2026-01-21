@@ -7,6 +7,36 @@ import { MOCK_HISTORY, NUTRITION_LOGS } from '../constants';
 // Checks if the user is logged in and Firestore is initialized
 const isCloudEnabled = () => !!db && !!auth?.currentUser;
 
+// --- SYSTEM KEYS (CLOUD SYNC) ---
+export const apiGetSystemKeys = async (): Promise<any> => {
+    // Allows any authenticated user to READ the system config (assuming Firestore rules allow it)
+    if (!!db && !!auth) {
+        try {
+            const docRef = doc(db, "system", "config");
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                return docSnap.data();
+            }
+        } catch (e) {
+            console.error("Cloud fetch system keys error", e);
+        }
+    }
+    return null;
+};
+
+export const apiSaveSystemKeys = async (keys: { googleApiKey?: string, openaiApiKey?: string, openaiBaseUrl?: string, openaiModel?: string }): Promise<void> => {
+    // Requires Write Permissions (Admin)
+    if (!!db) {
+        try {
+            // We use setDoc with merge to update keys
+            await setDoc(doc(db, "system", "config"), keys, { merge: true });
+        } catch (e) {
+            console.error("Cloud save system keys error. Ensure you have write permissions.", e);
+            throw e; // Rethrow to let UI handle error
+        }
+    }
+};
+
 // --- USER PROFILE ---
 export const apiGetUserProfile = async (): Promise<UserProfile | null> => {
     if (isCloudEnabled() && auth.currentUser) {
