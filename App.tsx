@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, NutritionLog, UserProfile, WorkoutRecord } from './types';
-import { NUTRITION_LOGS, MOCK_HISTORY } from './constants';
+import { NUTRITION_LOGS, MOCK_HISTORY, USER_PROFILE } from './constants';
 import { apiGetUserProfile, apiSaveUserProfile, apiGetWorkoutHistory, apiSaveWorkoutRecord, apiGetNutritionLogs, apiSyncNutritionState, apiDeleteWorkoutRecord, apiDeleteNutritionLog } from './lib/db';
 import { auth, onAuthStateChanged, signOut } from './lib/firebase'; // Updated import to include signOut
 
@@ -18,7 +18,8 @@ import Login from './components/Login';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false); // To prevent flash of login screen
+  const [isAdmin, setIsAdmin] = useState(false); // New Admin State
+  const [authChecked, setAuthChecked] = useState(false); 
 
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
@@ -34,12 +35,26 @@ const App: React.FC = () => {
   useEffect(() => {
       if (auth) {
           const unsubscribe = onAuthStateChanged(auth, (user) => {
-              setIsAuthenticated(!!user);
+              if (user) {
+                  // Standard Firebase Login
+                  setIsAuthenticated(true);
+                  setIsAdmin(false); 
+              } else {
+                  // Not logged in via Firebase
+                  // Check if we are in "Admin Session" (simple check for this example)
+                  const adminSession = sessionStorage.getItem('gohopro_admin_session');
+                  if (adminSession === 'true') {
+                      setIsAuthenticated(true);
+                      setIsAdmin(true);
+                  } else {
+                      setIsAuthenticated(false);
+                      setIsAdmin(false);
+                  }
+              }
               setAuthChecked(true);
           });
           return () => unsubscribe();
       } else {
-          // Fallback if auth is not initialized correctly
           setAuthChecked(true);
       }
   }, []);
@@ -49,19 +64,32 @@ const App: React.FC = () => {
       if (isAuthenticated) {
           fetchData();
       }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isAdmin]);
 
   const fetchData = async () => {
       setLoadingData(true);
       try {
-          const profile = await apiGetUserProfile();
-          setUserProfile(profile);
+          if (isAdmin) {
+              // Admin Mock Data
+              setUserProfile({
+                  ...USER_PROFILE,
+                  name: 'Admin',
+                  goal: 'maintain',
+                  avatar: '' // Or specific admin avatar
+              });
+              setHistoryLogs(MOCK_HISTORY);
+              setNutritionLogs(NUTRITION_LOGS);
+          } else {
+              // Real User Data
+              const profile = await apiGetUserProfile();
+              setUserProfile(profile);
 
-          const history = await apiGetWorkoutHistory();
-          setHistoryLogs(history.length ? history : MOCK_HISTORY);
+              const history = await apiGetWorkoutHistory();
+              setHistoryLogs(history.length ? history : MOCK_HISTORY);
 
-          const nutrition = await apiGetNutritionLogs();
-          setNutritionLogs(nutrition.length ? nutrition : NUTRITION_LOGS);
+              const nutrition = await apiGetNutritionLogs();
+              setNutritionLogs(nutrition.length ? nutrition : NUTRITION_LOGS);
+          }
       } catch (e) {
           console.error("Error loading data", e);
       } finally {
@@ -69,12 +97,12 @@ const App: React.FC = () => {
       }
   };
 
-  // Sync Nutrition Changes to DB/Local
+  // Sync Nutrition Changes to DB/Local (Skip for Admin)
   useEffect(() => {
-      if (nutritionLogs.length > 0 && !loadingData) {
+      if (!isAdmin && nutritionLogs.length > 0 && !loadingData) {
           apiSyncNutritionState(nutritionLogs);
       }
-  }, [nutritionLogs, loadingData]);
+  }, [nutritionLogs, loadingData, isAdmin]);
 
   // Theme Toggling Effect
   useEffect(() => {
@@ -96,11 +124,27 @@ const App: React.FC = () => {
 
   const handleSaveProfile = async (profile: UserProfile) => {
     setUserProfile(profile);
-    await apiSaveUserProfile(profile);
+    if (!isAdmin) {
+        await apiSaveUserProfile(profile);
+    }
   };
   
+  const handleLoginSuccess = (adminLogin: boolean = false) => {
+      if (adminLogin) {
+          setIsAdmin(true);
+          sessionStorage.setItem('gohopro_admin_session', 'true');
+      } else {
+          setIsAdmin(false);
+          sessionStorage.removeItem('gohopro_admin_session');
+      }
+      setIsAuthenticated(true);
+  };
+
   const handleLogout = async () => {
-      if (auth) {
+      if (isAdmin) {
+          sessionStorage.removeItem('gohopro_admin_session');
+          setIsAdmin(false);
+      } else if (auth) {
           try {
             await signOut(auth);
           } catch (error) {
@@ -115,20 +159,19 @@ const App: React.FC = () => {
   const handleFinishWorkout = async (record: WorkoutRecord) => {
       const newHistory = [record, ...historyLogs];
       setHistoryLogs(newHistory);
-      await apiSaveWorkoutRecord(record);
+      if (!isAdmin) await apiSaveWorkoutRecord(record);
       setCurrentView(View.HISTORY);
   };
 
   const handleDeleteRecord = async (recordId: string) => {
-      // Confirmation handled in History component
       const newHistory = historyLogs.filter(h => h.id !== recordId);
       setHistoryLogs(newHistory);
-      await apiDeleteWorkoutRecord(recordId);
+      if (!isAdmin) await apiDeleteWorkoutRecord(recordId);
   };
 
   const handleDeleteNutrition = async (logId: string) => {
       setNutritionLogs(prev => prev.filter(l => l.id !== logId));
-      await apiDeleteNutritionLog(logId);
+      if (!isAdmin) await apiDeleteNutritionLog(logId);
   };
 
   const handleGoToSettings = () => {
@@ -146,7 +189,7 @@ const App: React.FC = () => {
   if (!isAuthenticated) {
       return (
         <div className={isDarkMode ? 'dark' : ''}>
-           <Login onLoginSuccess={() => setIsAuthenticated(true)} />
+           <Login onLoginSuccess={handleLoginSuccess} />
         </div>
       );
   }
@@ -162,7 +205,8 @@ const App: React.FC = () => {
   }
 
   // 4. Onboarding (if authenticated but no profile)
-  if (!userProfile) {
+  // Admin skips onboarding
+  if (!userProfile && !isAdmin) {
     return (
       <div className={isDarkMode ? 'dark' : ''}>
          <Onboarding onSave={handleSaveProfile} />
@@ -215,6 +259,7 @@ const App: React.FC = () => {
                 userProfile={userProfile!} 
                 onUpdateProfile={handleSaveProfile}
                 onLogout={handleLogout}
+                isAdmin={isAdmin}
             />
           );
       default:

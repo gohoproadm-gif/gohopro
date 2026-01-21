@@ -393,6 +393,10 @@ const Workout: React.FC<WorkoutProps> = ({
   // ... (Keep existing helpers like getApiKey, getDeepSeekConfig, callOpenAI, callGemini, handleGeneratePlan)
   
   const getApiKey = () => {
+    // 1. Check System Key (Admin set)
+    const systemKey = localStorage.getItem('GO_SYSTEM_GOOGLE_API_KEY');
+    if (systemKey) return systemKey;
+
     try {
         // @ts-ignore
         if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
@@ -410,10 +414,17 @@ const Workout: React.FC<WorkoutProps> = ({
   };
 
   const getDeepSeekConfig = () => {
-      let apiKey = userProfile.openaiApiKey;
-      let baseUrl = userProfile.openaiBaseUrl;
-      let model = userProfile.openaiModel;
+      // 1. Check System Keys
+      let apiKey = localStorage.getItem('GO_SYSTEM_OPENAI_API_KEY');
+      let baseUrl = localStorage.getItem('GO_SYSTEM_OPENAI_BASE_URL');
+      let model = localStorage.getItem('GO_SYSTEM_OPENAI_MODEL');
 
+      // 2. Fallback to User Profile
+      if (!apiKey) apiKey = userProfile.openaiApiKey || null;
+      if (!baseUrl) baseUrl = userProfile.openaiBaseUrl || null;
+      if (!model) model = userProfile.openaiModel || null;
+
+      // 3. Fallback to Env
       try {
           // @ts-ignore
           if (typeof import.meta !== 'undefined' && import.meta.env) {
@@ -1231,7 +1242,7 @@ const Workout: React.FC<WorkoutProps> = ({
                         <span className={`font-bold px-2 py-0.5 rounded ${userProfile.aiProvider === 'openai' ? 'bg-neon-purple/10 text-neon-purple' : 'bg-neon-blue/10 text-neon-blue'}`}>
                             {userProfile.aiProvider === 'openai' ? 'OpenAI / DeepSeek' : 'Google Gemini'}
                         </span>
-                        {userProfile.aiProvider === 'openai' && !userProfile.openaiApiKey && (
+                        {userProfile.aiProvider === 'openai' && !userProfile.openaiApiKey && !getDeepSeekConfig().apiKey && (
                             <span className="text-red-500 text-[10px] ml-auto flex items-center gap-1"><AlertTriangle size={10}/> 未設定 API Key</span>
                         )}
                     </div>

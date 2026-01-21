@@ -205,6 +205,10 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
 
   // Robust API Key Retrieval
   const getApiKey = () => {
+    // 1. Check System Key (Admin set)
+    const systemKey = localStorage.getItem('GO_SYSTEM_GOOGLE_API_KEY');
+    if (systemKey) return systemKey;
+
     try {
         // @ts-ignore
         if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
@@ -249,7 +253,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
                  throw new Error("DeepSeek 模型僅支援文字功能，無法生成圖片。請切換至 Google Gemini 或使用 YouTube 示範。");
             }
 
-            const apiKey = userProfile.openaiApiKey;
+            const apiKey = userProfile.openaiApiKey || localStorage.getItem('GO_SYSTEM_OPENAI_API_KEY');
             if (!apiKey) throw new Error("API Key");
             
             const response = await fetch('https://api.openai.com/v1/images/generations', {
@@ -278,7 +282,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
             // Default Google Gemini
             const apiKey = getApiKey();
             if (!apiKey) {
-                setAiError("系統未偵測到 API Key (VITE_API_KEY)。");
+                setAiError("系統未偵測到 API Key。");
                 setIsGeneratingImage(false);
                 return;
             }
@@ -321,7 +325,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
         const msg = error.message || "未知錯誤";
         
         if (msg === "API Key") {
-             setAiError("API Key 缺失: 請先至「設定」頁面輸入");
+             setAiError("API Key 缺失: 請聯繫管理員設定");
         } else if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("Quota")) {
              setAiError("今日 AI 免費繪圖額度已滿，請稍後再試，或使用 YouTube。");
         } else if (msg.includes("Safety") || msg.includes("block") || msg.includes("阻擋")) {

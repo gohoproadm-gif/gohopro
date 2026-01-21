@@ -85,8 +85,12 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
     }
   }, [formStep]);
 
-  // Robust API Key Retrieval
+  // Robust API Key Retrieval (Updated for System Keys)
   const getApiKey = () => {
+    // 1. Check System Key (Admin set)
+    const systemKey = localStorage.getItem('GO_SYSTEM_GOOGLE_API_KEY');
+    if (systemKey) return systemKey;
+
     try {
         // @ts-ignore
         if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
@@ -103,13 +107,19 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
     return null;
   };
 
-  // Robust DeepSeek/OpenAI Key Retrieval
+  // Robust DeepSeek/OpenAI Key Retrieval (Updated for System Keys)
   const getDeepSeekConfig = () => {
-      let apiKey = userProfile.openaiApiKey;
-      let baseUrl = userProfile.openaiBaseUrl;
-      let model = userProfile.openaiModel;
+      // 1. Check System Keys
+      let apiKey = localStorage.getItem('GO_SYSTEM_OPENAI_API_KEY');
+      let baseUrl = localStorage.getItem('GO_SYSTEM_OPENAI_BASE_URL');
+      let model = localStorage.getItem('GO_SYSTEM_OPENAI_MODEL');
 
-      // Try VITE_ env vars (most likely for this project)
+      // 2. Fallback to User Profile if System Keys are missing (Backward compatibility)
+      if (!apiKey) apiKey = userProfile.openaiApiKey || null;
+      if (!baseUrl) baseUrl = userProfile.openaiBaseUrl || null;
+      if (!model) model = userProfile.openaiModel || null;
+
+      // 3. Fallback to Env Vars
       try {
           // @ts-ignore
           if (typeof import.meta !== 'undefined' && import.meta.env) {
@@ -122,7 +132,6 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
           }
       } catch(e) {}
 
-      // Try process.env as fallback
       if (!apiKey && typeof process !== 'undefined' && process.env) {
           apiKey = process.env.VITE_OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
           baseUrl = baseUrl || process.env.VITE_OPENAI_BASE_URL || process.env.NEXT_PUBLIC_OPENAI_BASE_URL;
@@ -213,14 +222,15 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
         let result;
         const { apiKey } = getDeepSeekConfig();
         
-        // Strategy: Try DeepSeek/OpenAI first if available, then fallback to Gemini
+        // Strategy: Try DeepSeek/OpenAI first if available/selected, then fallback to Gemini
         let used = '';
-        if (userProfile.aiProvider === 'openai' || apiKey) {
+        if (userProfile.aiProvider === 'openai') {
             try {
                 result = await callOpenAI();
                 used = 'DeepSeek';
             } catch (openAiErr: any) {
                 console.warn("DeepSeek/OpenAI failed, falling back to Gemini:", openAiErr);
+                setAiError(`DeepSeek 錯誤: ${openAiErr.message}。正在嘗試使用 Gemini 備援...`);
                 // Fallback to Gemini
                 result = await callGemini();
                 used = 'Gemini (備援)';
@@ -240,13 +250,19 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                 f: result.fat
             });
             setFormStep('RESULT');
+            setAiError(null); // Clear error if success
         }
     } catch (error: any) {
         console.error("Analysis failed", error);
-        if (error.message?.includes("API Key")) {
-             setAiError("AI 分析失敗: 所有 API Key 皆無效");
+        
+        let msg = error.message || "未知錯誤";
+        
+        if (msg.includes("400") && msg.includes("User location")) {
+             setAiError("AI 分析失敗: Google Gemini 目前不支援此地區。請檢查 VPN 或切換至 DeepSeek。");
+        } else if (msg.includes("API Key")) {
+             setAiError("AI 分析失敗: 所有 API Key 皆無效，請聯繫管理員。");
         } else {
-             setAiError("AI 分析失敗: " + (error.message || "請稍後再試"));
+             setAiError("AI 分析失敗: " + msg);
         }
     } finally {
         setIsAnalyzing(false);
@@ -565,6 +581,9 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                                         <AlertTriangle size={16} className="shrink-0" />
                                         <span className="break-words leading-relaxed font-bold">{aiError}</span>
                                     </div>
+                                    {aiError.includes("不支援") && (
+                                        <button onClick={onGoToSettings} className="underline ml-6">檢查 AI 設定</button>
+                                    )}
                                 </div>
                               )}
                               

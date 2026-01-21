@@ -1,22 +1,38 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download, Bot, Key, Globe, Cpu } from 'lucide-react';
+import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download, Bot, Key, Globe, Cpu, ShieldAlert, Check } from 'lucide-react';
 
 interface ProfileSettingsProps {
   userProfile: UserProfile;
   onUpdateProfile: (profile: UserProfile) => void;
   onLogout?: () => void;
+  isAdmin?: boolean;
 }
 
-const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdateProfile, onLogout }) => {
+const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdateProfile, onLogout, isAdmin }) => {
   const [profile, setProfile] = useState<UserProfile>(userProfile);
   const [isSaved, setIsSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Admin System Keys
+  const [systemGoogleKey, setSystemGoogleKey] = useState('');
+  const [systemOpenAIKey, setSystemOpenAIKey] = useState('');
+  const [systemOpenAIBaseUrl, setSystemOpenAIBaseUrl] = useState('');
+  const [systemOpenAIModel, setSystemOpenAIModel] = useState('');
+
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
+
+  useEffect(() => {
+    if (isAdmin) {
+        setSystemGoogleKey(localStorage.getItem('GO_SYSTEM_GOOGLE_API_KEY') || '');
+        setSystemOpenAIKey(localStorage.getItem('GO_SYSTEM_OPENAI_API_KEY') || '');
+        setSystemOpenAIBaseUrl(localStorage.getItem('GO_SYSTEM_OPENAI_BASE_URL') || '');
+        setSystemOpenAIModel(localStorage.getItem('GO_SYSTEM_OPENAI_MODEL') || '');
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
@@ -53,7 +69,17 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
   };
 
   const handleSave = () => {
-    onUpdateProfile(profile);
+    if (isAdmin) {
+        // Save System Keys
+        localStorage.setItem('GO_SYSTEM_GOOGLE_API_KEY', systemGoogleKey);
+        localStorage.setItem('GO_SYSTEM_OPENAI_API_KEY', systemOpenAIKey);
+        localStorage.setItem('GO_SYSTEM_OPENAI_BASE_URL', systemOpenAIBaseUrl);
+        localStorage.setItem('GO_SYSTEM_OPENAI_MODEL', systemOpenAIModel);
+    } else {
+        // Normal Save
+        onUpdateProfile(profile);
+    }
+    
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
@@ -61,8 +87,11 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
   return (
     <div className="max-w-2xl mx-auto space-y-8 pb-10">
       <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">個人資料與設定</h2>
-          {isSaved && <span className="text-neon-green font-bold text-sm animate-fade-in">已儲存變更！</span>}
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+              {isAdmin && <ShieldAlert className="text-red-500" />}
+              {isAdmin ? '系統管理設定' : '個人資料與設定'}
+          </h2>
+          {isSaved && <span className="text-neon-green font-bold text-sm animate-fade-in flex items-center gap-1"><Check size={16}/> 已儲存變更！</span>}
       </div>
 
       <div className="bg-white dark:bg-charcoal-800 rounded-2xl p-6 md:p-8 shadow-sm border border-gray-200 dark:border-gray-700 space-y-8">
@@ -92,10 +121,11 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                 accept="image/*" 
                 className="hidden" 
             />
-            <p className="text-xs text-gray-500 mt-2">點擊上方圖片可更換頭像</p>
+            {!isAdmin && <p className="text-xs text-gray-500 mt-2">點擊上方圖片可更換頭像</p>}
+            {isAdmin && <p className="text-xs font-bold text-red-500 mt-2">ADMINISTRATOR</p>}
         </div>
 
-        {/* Basic Info */}
+        {/* Basic Info (Editable for User, Read-only for Admin Mock) */}
         <div className="space-y-6">
             <h3 className="text-lg font-bold border-b border-gray-100 dark:border-charcoal-700 pb-2">基本資訊</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -106,6 +136,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                         value={profile.name}
                         onChange={(e) => setProfile({...profile, name: e.target.value})}
                         className="w-full p-3 rounded-xl bg-gray-50 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue"
+                        disabled={isAdmin}
                     />
                 </div>
                 <div>
@@ -115,6 +146,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                         value={profile.age}
                         onChange={(e) => setProfile({...profile, age: parseInt(e.target.value) || 0})}
                         className="w-full p-3 rounded-xl bg-gray-50 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue"
+                        disabled={isAdmin}
                     />
                 </div>
             </div>
@@ -129,6 +161,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                         value={profile.height}
                         onChange={(e) => setProfile({...profile, height: parseInt(e.target.value) || 0})}
                         className="w-full p-3 rounded-xl bg-gray-50 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue text-center font-bold text-lg"
+                        disabled={isAdmin}
                     />
                  </div>
                  <div>
@@ -140,6 +173,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                         value={profile.weight}
                         onChange={(e) => setProfile({...profile, weight: parseInt(e.target.value) || 0})}
                         className="w-full p-3 rounded-xl bg-gray-50 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange text-center font-bold text-lg"
+                        disabled={isAdmin}
                     />
                  </div>
             </div>
@@ -156,12 +190,12 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                     ].map(opt => (
                         <button
                         key={opt.val}
-                        onClick={() => setProfile({ ...profile, goal: opt.val as any })}
+                        onClick={() => !isAdmin && setProfile({ ...profile, goal: opt.val as any })}
                         className={`p-3 rounded-xl border text-center transition-all text-sm font-medium ${
                             profile.goal === opt.val
                             ? 'border-cta-orange bg-orange-50 dark:bg-orange-900/20 text-cta-orange'
                             : 'border-transparent bg-gray-50 dark:bg-charcoal-900 text-gray-500'
-                        }`}
+                        } ${isAdmin ? 'cursor-default' : ''}`}
                         >
                         {opt.label}
                         </button>
@@ -170,13 +204,14 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
             </div>
         </div>
 
-        {/* AI Configuration Section */}
+        {/* AI Configuration Section (ADMIN ONLY for Keys, User for Preference) */}
         <div className="space-y-6">
             <h3 className="text-lg font-bold border-b border-gray-100 dark:border-charcoal-700 pb-2 flex items-center gap-2">
                 <Bot size={20} className="text-neon-purple" /> AI 模型設定
             </h3>
             
             <div className="space-y-4">
+                {/* Regular User sees just the provider toggle (if multiple available) or just info */}
                 <div>
                     <label className="block text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">AI 供應商</label>
                     <div className="grid grid-cols-2 gap-3">
@@ -203,52 +238,66 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                     </div>
                 </div>
 
-                {profile.aiProvider === 'openai' && (
-                    <div className="space-y-4 bg-gray-50 dark:bg-charcoal-900/50 p-4 rounded-xl border border-gray-200 dark:border-charcoal-700 animate-fade-in">
-                        <div>
-                            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 mb-1">
-                                <Globe size={14} /> Base URL
-                            </label>
-                            <input 
-                                type="text" 
-                                value={profile.openaiBaseUrl || ''}
-                                onChange={(e) => setProfile({...profile, openaiBaseUrl: e.target.value})}
-                                placeholder="例如: https://api.deepseek.com"
-                                className="w-full p-2.5 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-600 outline-none focus:border-neon-purple text-sm font-mono"
-                            />
-                            <p className="text-[10px] text-gray-400 mt-1">DeepSeek 請填: https://api.deepseek.com</p>
+                {/* Only Admin can see and edit the actual Keys */}
+                {isAdmin && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 p-4 rounded-xl space-y-4">
+                        <div className="flex items-center gap-2 text-red-500 font-bold text-sm mb-2">
+                            <ShieldAlert size={18}/> 系統全域 API Key 設定 (僅管理員可見)
                         </div>
-                        <div>
-                            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 mb-1">
-                                <Key size={14} /> API Key
-                            </label>
-                            <input 
-                                type="password" 
-                                value={profile.openaiApiKey || ''}
-                                onChange={(e) => setProfile({...profile, openaiApiKey: e.target.value})}
-                                placeholder="sk-..."
-                                className="w-full p-2.5 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-600 outline-none focus:border-neon-purple text-sm font-mono"
-                            />
-                        </div>
-                        <div>
-                            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 mb-1">
-                                <Cpu size={14} /> Model Name
-                            </label>
-                            <input 
-                                type="text" 
-                                value={profile.openaiModel || ''}
-                                onChange={(e) => setProfile({...profile, openaiModel: e.target.value})}
-                                placeholder="例如: deepseek-chat 或 gpt-4o"
-                                className="w-full p-2.5 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-600 outline-none focus:border-neon-purple text-sm font-mono"
-                            />
+                        
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Google Gemini API Key</label>
+                                <input 
+                                    type="text" 
+                                    value={systemGoogleKey}
+                                    onChange={(e) => setSystemGoogleKey(e.target.value)}
+                                    className="w-full p-2 rounded bg-white dark:bg-charcoal-900 border border-gray-300 dark:border-charcoal-600 text-sm font-mono"
+                                    placeholder="AIza..."
+                                />
+                            </div>
+                            <hr className="border-gray-200 dark:border-charcoal-600 my-2" />
+                            <div>
+                                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">OpenAI/DeepSeek API Key</label>
+                                <input 
+                                    type="text" 
+                                    value={systemOpenAIKey}
+                                    onChange={(e) => setSystemOpenAIKey(e.target.value)}
+                                    className="w-full p-2 rounded bg-white dark:bg-charcoal-900 border border-gray-300 dark:border-charcoal-600 text-sm font-mono"
+                                    placeholder="sk-..."
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">OpenAI Base URL</label>
+                                <input 
+                                    type="text" 
+                                    value={systemOpenAIBaseUrl}
+                                    onChange={(e) => setSystemOpenAIBaseUrl(e.target.value)}
+                                    className="w-full p-2 rounded bg-white dark:bg-charcoal-900 border border-gray-300 dark:border-charcoal-600 text-sm font-mono"
+                                    placeholder="https://api.deepseek.com"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Model Name</label>
+                                <input 
+                                    type="text" 
+                                    value={systemOpenAIModel}
+                                    onChange={(e) => setSystemOpenAIModel(e.target.value)}
+                                    className="w-full p-2 rounded bg-white dark:bg-charcoal-900 border border-gray-300 dark:border-charcoal-600 text-sm font-mono"
+                                    placeholder="deepseek-chat"
+                                />
+                            </div>
                         </div>
                     </div>
                 )}
                 
-                {(profile.aiProvider === 'google' || !profile.aiProvider) && (
-                     <div className="bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg">
-                         <p className="text-xs text-blue-600 dark:text-blue-300">
-                             預設使用 Google Gemini 免費模型。若要使用高級功能，請確保系統環境變數已設定 API Key。
+                {/* Normal users just see info text */}
+                {!isAdmin && (
+                     <div className="bg-gray-50 dark:bg-charcoal-900/50 p-4 rounded-xl border border-gray-200 dark:border-charcoal-700">
+                         <p className="text-xs text-gray-500">
+                             本系統使用中央配置的 API 連線服務。您無需手動輸入 API Key。
+                             <br/>
+                             當前選擇提供商: <span className="font-bold text-gray-700 dark:text-gray-300">{profile.aiProvider === 'openai' ? 'OpenAI / DeepSeek' : 'Google Gemini'}</span>
                          </p>
                      </div>
                 )}
@@ -262,7 +311,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                 className="flex-1 bg-cta-orange hover:bg-cta-hover text-white font-bold py-4 rounded-xl shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
             >
                 <Save size={20} />
-                儲存變更
+                {isAdmin ? '儲存系統設定' : '儲存變更'}
             </button>
             
             {onLogout && (
@@ -291,7 +340,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
       </div>
       
       <div className="text-center text-xs text-gray-400">
-          Gohopro v1.3.0
+          Gohopro v1.3.1
       </div>
     </div>
   );

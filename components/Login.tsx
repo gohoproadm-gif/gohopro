@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
 import { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from '../lib/firebase';
-import { Dumbbell, Mail, Lock, LogIn, UserPlus, AlertCircle, ArrowRight, Activity, Chrome, HelpCircle, X, CheckCircle, Send, ExternalLink } from 'lucide-react';
+import { Dumbbell, Mail, Lock, LogIn, UserPlus, AlertCircle, ArrowRight, Activity, Chrome, HelpCircle, X, CheckCircle, Send, ExternalLink, ShieldCheck } from 'lucide-react';
 
 interface LoginProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (isAdmin?: boolean) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
@@ -25,10 +25,22 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // --- SUPER ADMIN LOGIN CHECK ---
+    if (email === 'admin' && password === 'gohoproadmin') {
+        setLoading(true);
+        // Simulate network delay for better UX
+        setTimeout(() => {
+            setLoading(false);
+            onLoginSuccess(true); // Pass true for isAdmin
+        }, 800);
+        return;
+    }
+    // -------------------------------
+
     // Demo Mode Fallback if user hasn't set up Firebase keys yet
     if (!isFirebaseConfigured) {
         if (email === 'demo@example.com' || password === 'demo') {
-            onLoginSuccess();
+            onLoginSuccess(false);
             return;
         }
         setError("Firebase 尚未設定。請在 lib/firebase.ts 填入您的 API Key，或點擊下方「試用版」按鈕。");
@@ -44,7 +56,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      onLoginSuccess();
+      onLoginSuccess(false);
     } catch (err: any) {
       console.error("Auth Error:", err);
       if (err.code === 'auth/invalid-credential') setError("帳號或密碼錯誤");
@@ -71,7 +83,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           const provider = new GoogleAuthProvider();
           // Use popup
           await signInWithPopup(auth, provider);
-          onLoginSuccess();
+          onLoginSuccess(false);
       } catch (err: any) {
           console.error("Google Login Error:", err);
           if (err.code === 'auth/popup-closed-by-user') {
@@ -93,7 +105,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   const handleDemoLogin = () => {
       // Allow bypass for demo purposes
-      onLoginSuccess();
+      onLoginSuccess(false);
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -144,11 +156,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
              <form onSubmit={handleAuth} className="space-y-4">
                  <div className="space-y-1">
-                     <label className="text-xs font-bold text-gray-500 ml-1">Email</label>
+                     <label className="text-xs font-bold text-gray-500 ml-1">Email / 帳號</label>
                      <div className="relative">
                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                          <input 
-                           type="email" 
+                           type="text" 
                            required
                            className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 rounded-xl outline-none focus:border-neon-blue transition-colors"
                            placeholder="name@example.com"
