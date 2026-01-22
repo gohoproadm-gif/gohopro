@@ -584,7 +584,18 @@ const Workout: React.FC<WorkoutProps> = ({
           
           const userPromptMsg = aiPrompt;
 
-          if (userProfile.aiProvider === 'openai' || apiKey) {
+          // Fixed Logic: Respect User Preference
+          let shouldUseOpenAI = false;
+          if (userProfile.aiProvider === 'openai') {
+              shouldUseOpenAI = true;
+          } else if (userProfile.aiProvider === 'google') {
+              shouldUseOpenAI = false;
+          } else {
+              // Auto: Use OpenAI if available, else Google
+              shouldUseOpenAI = !!apiKey;
+          }
+
+          if (shouldUseOpenAI && apiKey) {
                result = await callOpenAI(userPromptMsg, systemPrompt);
           } else {
                result = await callGemini(`Create a workout plan based on this request: "${userPromptMsg}". 
@@ -619,7 +630,7 @@ const Workout: React.FC<WorkoutProps> = ({
       } catch (e: any) {
           let msg = e.message || "未知錯誤";
           if (msg.includes("Insufficient Balance")) {
-              setAiError("生成失敗: 餘額不足 (Insufficient Balance)。請檢查您的 API Key 額度，或切換至 Google Gemini。");
+              setAiError("生成失敗: DeepSeek/OpenAI 餘額不足。請切換至 Google Gemini 或儲值。");
           } else if (msg.includes("API Key")) {
                setAiError("生成失敗: API Key 缺失 (請檢查設定)");
           } else {
@@ -664,7 +675,17 @@ const Workout: React.FC<WorkoutProps> = ({
           let result;
           const { apiKey } = getDeepSeekConfig();
 
-          if (userProfile.aiProvider === 'openai' || apiKey) {
+          // Fixed Logic: Respect User Preference
+          let shouldUseOpenAI = false;
+          if (userProfile.aiProvider === 'openai') {
+              shouldUseOpenAI = true;
+          } else if (userProfile.aiProvider === 'google') {
+              shouldUseOpenAI = false;
+          } else {
+              shouldUseOpenAI = !!apiKey;
+          }
+
+          if (shouldUseOpenAI && apiKey) {
               result = await callOpenAI(prompt, systemPrompt);
           } else {
               result = await callGemini(systemPrompt + "\n\n" + prompt);
@@ -693,7 +714,12 @@ const Workout: React.FC<WorkoutProps> = ({
 
       } catch (e: any) {
           console.error("Import failed", e);
-          setAiError("匯入失敗: " + (e.message || "無法解析文字"));
+          let msg = e.message || "無法解析文字";
+          if (msg.includes("Insufficient Balance")) {
+              setAiError("匯入失敗: DeepSeek/OpenAI 餘額不足。請前往「設定」切換至 Google Gemini。");
+          } else {
+              setAiError("匯入失敗: " + msg);
+          }
       } finally {
           setIsGenerating(false);
       }
@@ -1329,6 +1355,9 @@ const Workout: React.FC<WorkoutProps> = ({
                                 <AlertTriangle size={14} className="shrink-0" />
                                 <span>{aiError}</span>
                             </div>
+                            {aiError.includes("餘額不足") && (
+                                <button onClick={onGoToSettings} className="underline font-bold text-red-600 dark:text-red-400 ml-6">前往設定切換 AI</button>
+                            )}
                         </div>
                     )}
 
