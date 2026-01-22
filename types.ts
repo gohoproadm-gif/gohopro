@@ -9,6 +9,8 @@ export enum View {
   SETTINGS = 'SETTINGS'
 }
 
+export type Language = 'zh' | 'en'; // Added Language type
+
 export interface ExerciseSetLog {
   setNumber: number;
   weight: number;

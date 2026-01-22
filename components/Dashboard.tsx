@@ -2,16 +2,50 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Activity, Flame, Clock, Trophy, User, ArrowRight, Target, Droplets, Plus, Minus, Edit2, X, Save } from 'lucide-react';
 import { MOTIVATIONAL_QUOTES, DEFAULT_PLANS } from '../constants';
-import { NutritionLog, UserProfile, ScheduledWorkout, DailyPlan } from '../types';
+import { NutritionLog, UserProfile, ScheduledWorkout, DailyPlan, Language } from '../types';
 
 interface DashboardProps {
   onStartWorkout: () => void;
   nutritionLogs: NutritionLog[];
   userProfile: UserProfile;
+  language: Language;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, userProfile }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, userProfile, language }) => {
   const quote = MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+
+  const t = {
+    zh: {
+        goodMorning: '早安',
+        calories: '攝取卡路里',
+        steps: '今日步數',
+        streak: '連續天數',
+        bodyStats: '身體數據',
+        waterTracker: '飲水追蹤',
+        nextWorkout: '下一個訓練',
+        noPlan: '今日暫無計畫',
+        startWorkout: '開始訓練',
+        arrangeWorkout: '安排訓練',
+        editSteps: '編輯步數',
+        save: '儲存',
+        progress: '今日進度'
+    },
+    en: {
+        goodMorning: 'Good Morning',
+        calories: 'Calories Intake',
+        steps: 'Steps Today',
+        streak: 'Day Streak',
+        bodyStats: 'Body Stats',
+        waterTracker: 'Water Tracker',
+        nextWorkout: 'Next Workout',
+        noPlan: 'No Plan Today',
+        startWorkout: 'Start Workout',
+        arrangeWorkout: 'Plan Workout',
+        editSteps: 'Edit Steps',
+        save: 'Save',
+        progress: 'Progress'
+    }
+  }[language];
 
   // Calculate Nutrition Totals for TODAY
   const todayStr = new Date().toISOString().split('T')[0];
@@ -148,7 +182,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
         </svg>
         <div className="absolute flex flex-col items-center justify-center text-center">
              <span className="text-3xl font-bold text-gray-800 dark:text-white">{Math.round(progress)}%</span>
-             <span className="text-xs text-gray-500 dark:text-gray-400">今日進度</span>
+             <span className="text-xs text-gray-500 dark:text-gray-400">{t.progress}</span>
         </div>
       </div>
     );
@@ -161,7 +195,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
   return (
     <div className="space-y-6">
       <header className="mb-6">
-        <h2 className="text-3xl font-bold mb-1">早安，{userProfile.name}！</h2>
+        <h2 className="text-3xl font-bold mb-1">{t.goodMorning}，{userProfile.name}！</h2>
         <p className="text-gray-500 dark:text-gray-400 italic">"{quote}"</p>
       </header>
 
@@ -176,7 +210,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
               <div className="bg-gray-50 dark:bg-charcoal-900 p-3 rounded-xl flex flex-col items-center">
                 <Flame className="text-cta-orange mb-1" size={20} />
                 <span className="text-lg font-bold">{totalNutrition.calories}</span>
-                <span className="text-[10px] text-gray-500">攝取卡路里</span>
+                <span className="text-[10px] text-gray-500">{t.calories}</span>
               </div>
               <div 
                 onClick={() => { setTempSteps(steps); setShowStepsModal(true); }}
@@ -184,12 +218,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
               >
                 <Activity className="text-neon-blue mb-1 group-hover:scale-110 transition-transform" size={20} />
                 <span className="text-lg font-bold">{steps.toLocaleString()}</span>
-                <span className="text-[10px] text-gray-500 flex items-center gap-1">今日步數 <Edit2 size={8}/></span>
+                <span className="text-[10px] text-gray-500 flex items-center gap-1">{t.steps} <Edit2 size={8}/></span>
               </div>
                <div className="bg-gray-50 dark:bg-charcoal-900 p-3 rounded-xl flex flex-col items-center">
                  <Trophy className="text-yellow-400 mb-1" size={20} />
                  <span className="text-lg font-bold">7</span>
-                 <span className="text-[10px] text-gray-500">連續天數</span>
+                 <span className="text-[10px] text-gray-500">{t.streak}</span>
               </div>
             </div>
           </div>
@@ -201,7 +235,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
               <div className="bg-white dark:bg-charcoal-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-between mb-4 border-b border-gray-200 dark:border-gray-700 pb-3">
                       <h3 className="font-bold text-lg flex items-center gap-2">
-                          <User className="text-neon-blue" size={20} /> 身體數據
+                          <User className="text-neon-blue" size={20} /> {t.bodyStats}
                       </h3>
                   </div>
                   <div className="grid grid-cols-3 gap-4">
@@ -224,7 +258,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
               <div className="bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl p-6 shadow-lg text-white relative overflow-hidden group">
                    <div className="relative z-10">
                         <div className="flex justify-between items-start mb-4">
-                            <h3 className="font-bold text-lg flex items-center gap-2"><Droplets size={20}/> 飲水追蹤</h3>
+                            <h3 className="font-bold text-lg flex items-center gap-2"><Droplets size={20}/> {t.waterTracker}</h3>
                             <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded">{Math.round((waterIntake/dailyWaterGoal)*100)}%</span>
                         </div>
                         
@@ -260,25 +294,25 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-gradient-to-br from-charcoal-800 to-charcoal-900 dark:from-charcoal-800 dark:to-charcoal-900 bg-white border border-gray-200 dark:border-gray-700 rounded-xl p-6 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-32 h-32 bg-neon-green/10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
-            <h3 className="text-xl font-bold mb-2 z-10 relative">下一個訓練</h3>
+            <h3 className="text-xl font-bold mb-2 z-10 relative">{t.nextWorkout}</h3>
             {nextWorkout ? (
                 <>
-                    <p className="text-gray-500 dark:text-gray-400 mb-4 z-10 relative">{nextWorkout.title} • {nextWorkout.duration} 分鐘</p>
+                    <p className="text-gray-500 dark:text-gray-400 mb-4 z-10 relative">{nextWorkout.title} • {nextWorkout.duration} mins</p>
                     <button 
                     onClick={onStartWorkout}
                     className="bg-cta-orange hover:bg-cta-hover text-white px-6 py-2 rounded-full font-semibold transition-all shadow-lg shadow-orange-500/30 z-10 relative active:scale-95"
                     >
-                        開始訓練
+                        {t.startWorkout}
                     </button>
                 </>
             ) : (
                 <>
-                    <p className="text-gray-500 dark:text-gray-400 mb-4 z-10 relative">今日暫無計畫</p>
+                    <p className="text-gray-500 dark:text-gray-400 mb-4 z-10 relative">{t.noPlan}</p>
                     <button 
                     onClick={onStartWorkout}
                     className="bg-charcoal-700 hover:bg-charcoal-600 text-white px-6 py-2 rounded-full font-semibold transition-all z-10 relative"
                     >
-                        安排訓練
+                        {t.arrangeWorkout}
                     </button>
                 </>
             )}
@@ -290,7 +324,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
               <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
                   <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-lg font-bold flex items-center gap-2"><Activity className="text-neon-blue"/> 編輯步數</h3>
+                      <h3 className="text-lg font-bold flex items-center gap-2"><Activity className="text-neon-blue"/> {t.editSteps}</h3>
                       <button onClick={() => setShowStepsModal(false)}><X size={20} className="text-gray-400"/></button>
                   </div>
                   
@@ -312,7 +346,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, us
                       </div>
 
                       <button onClick={handleSaveSteps} className="w-full bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2">
-                          <Save size={18}/> 儲存
+                          <Save size={18}/> {t.save}
                       </button>
                   </div>
               </div>

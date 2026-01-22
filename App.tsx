@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { View, NutritionLog, UserProfile, WorkoutRecord } from './types';
+import { View, NutritionLog, UserProfile, WorkoutRecord, Language } from './types';
 import { NUTRITION_LOGS, MOCK_HISTORY, USER_PROFILE } from './constants';
 import { apiGetUserProfile, apiSaveUserProfile, apiGetWorkoutHistory, apiSaveWorkoutRecord, apiGetNutritionLogs, apiSyncNutritionState, apiDeleteWorkoutRecord, apiDeleteNutritionLog, apiGetSystemKeys } from './lib/db';
 import { auth, onAuthStateChanged, signOut } from './lib/firebase'; // Updated import to include signOut
@@ -23,6 +23,7 @@ const App: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const [language, setLanguage] = useState<Language>('zh'); // Default Language
   const [autoStartWorkout, setAutoStartWorkout] = useState<boolean>(false);
   
   // State for Data
@@ -235,6 +236,7 @@ const App: React.FC = () => {
             onStartWorkout={handleStartQuickWorkout} 
             nutritionLogs={nutritionLogs}
             userProfile={userProfile!}
+            language={language}
           />
         );
       case View.HISTORY:
@@ -250,6 +252,7 @@ const App: React.FC = () => {
             onGoToSettings={handleGoToSettings}
             nutritionLogs={nutritionLogs}
             onDeleteNutrition={handleDeleteNutrition}
+            language={language}
           />
         );
       case View.PROGRESS:
@@ -275,7 +278,7 @@ const App: React.FC = () => {
             />
           );
       default:
-        return <Dashboard onStartWorkout={handleStartQuickWorkout} nutritionLogs={nutritionLogs} userProfile={userProfile!} />;
+        return <Dashboard onStartWorkout={handleStartQuickWorkout} nutritionLogs={nutritionLogs} userProfile={userProfile!} language={language} />;
     }
   };
 
@@ -286,6 +289,8 @@ const App: React.FC = () => {
       isDarkMode={isDarkMode}
       toggleTheme={toggleTheme}
       userProfile={userProfile}
+      language={language}
+      setLanguage={setLanguage}
     >
       {renderView()}
     </Layout>

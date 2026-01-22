@@ -1,6 +1,7 @@
+
 import React, { ReactNode } from 'react';
-import { View, UserProfile } from '../types';
-import { LayoutDashboard, History, Dumbbell, TrendingUp, Utensils, User, Sun, Moon, BookOpen } from 'lucide-react';
+import { View, UserProfile, Language } from '../types';
+import { LayoutDashboard, History, Dumbbell, TrendingUp, Utensils, User, Sun, Moon, BookOpen, Languages } from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -9,17 +10,40 @@ interface LayoutProps {
   isDarkMode: boolean;
   toggleTheme: () => void;
   userProfile?: UserProfile | null;
+  language: Language;
+  setLanguage: (lang: Language) => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, isDarkMode, toggleTheme, userProfile }) => {
+const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, isDarkMode, toggleTheme, userProfile, language, setLanguage }) => {
   
+  const labels = {
+    zh: {
+      dashboard: '儀錶板',
+      workout: '訓練',
+      tutorials: '教學',
+      history: '記錄',
+      progress: '進度',
+      nutrition: '營養',
+    },
+    en: {
+      dashboard: 'Dashboard',
+      workout: 'Workout',
+      tutorials: 'Tutorials',
+      history: 'History',
+      progress: 'Progress',
+      nutrition: 'Nutrition',
+    }
+  };
+
+  const t = labels[language];
+
   const navItems = [
-    { view: View.DASHBOARD, label: '儀錶板', icon: LayoutDashboard },
-    { view: View.WORKOUT, label: '訓練', icon: Dumbbell },
-    { view: View.TUTORIALS, label: '教學', icon: BookOpen },
-    { view: View.HISTORY, label: '記錄', icon: History },
-    { view: View.PROGRESS, label: '進度', icon: TrendingUp },
-    { view: View.NUTRITION, label: '營養', icon: Utensils },
+    { view: View.DASHBOARD, label: t.dashboard, icon: LayoutDashboard },
+    { view: View.WORKOUT, label: t.workout, icon: Dumbbell },
+    { view: View.TUTORIALS, label: t.tutorials, icon: BookOpen },
+    { view: View.HISTORY, label: t.history, icon: History },
+    { view: View.PROGRESS, label: t.progress, icon: TrendingUp },
+    { view: View.NUTRITION, label: t.nutrition, icon: Utensils },
   ];
 
   const renderAvatar = () => {
@@ -36,6 +60,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, 
     );
   };
 
+  const toggleLanguage = () => {
+      setLanguage(language === 'zh' ? 'en' : 'zh');
+  };
+
   return (
     <div className="min-h-screen flex flex-col font-sans">
       {/* Mobile Top Header */}
@@ -44,7 +72,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, 
            <Dumbbell className="w-6 h-6 text-cta-orange" />
            <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-neon-green to-neon-blue bg-clip-text text-transparent">Gohopro</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={toggleLanguage}
+            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-charcoal-800 text-gray-500 transition-colors flex items-center gap-1"
+          >
+             <Languages size={20} />
+             <span className="text-xs font-bold">{language === 'zh' ? '中' : 'EN'}</span>
+          </button>
           <button 
             onClick={toggleTheme}
             className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-charcoal-800 text-gray-500 transition-colors"
@@ -53,7 +88,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, 
           </button>
           <button 
             onClick={() => setCurrentView(View.SETTINGS)}
-            className="w-9 h-9 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-700 active:border-cta-orange transition-colors"
+            className="w-8 h-8 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-700 active:border-cta-orange transition-colors"
           >
              {renderAvatar()}
           </button>
@@ -85,6 +120,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, 
         </nav>
 
         <div className="flex items-center space-x-4">
+          <button 
+            onClick={toggleLanguage}
+            className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors flex items-center gap-1 font-bold text-sm"
+          >
+             <Languages size={18} />
+             {language === 'zh' ? '中' : 'EN'}
+          </button>
           <button 
             onClick={toggleTheme}
             className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"

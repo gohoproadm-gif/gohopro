@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { DEFAULT_PLANS, HK_HOLIDAYS } from '../constants';
-import { DailyPlan, ScheduledWorkout, WorkoutRecord, ExerciseSetLog, CalendarEvent, NutritionLog, UserProfile, Exercise } from '../types';
-import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings, Minus, RefreshCw, RotateCcw, PenTool, Flame, Pencil, Save, Trophy, Share2 } from 'lucide-react';
+import { DailyPlan, ScheduledWorkout, WorkoutRecord, ExerciseSetLog, CalendarEvent, NutritionLog, UserProfile, Exercise, Language } from '../types';
+import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings, Minus, RefreshCw, RotateCcw, PenTool, Flame, Pencil, Save, Trophy, Share2, ClipboardPaste } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { apiGetSchedule, apiSaveSchedule, apiGetEvents, apiSaveEvent, apiDeleteEvent } from '../lib/db';
 
-type Mode = 'TIMETABLE' | 'PLANS' | 'CREATE' | 'MANUAL_CREATE' | 'ACTIVE_SESSION' | 'SUMMARY';
+type Mode = 'TIMETABLE' | 'PLANS' | 'CREATE' | 'MANUAL_CREATE' | 'IMPORT_TEXT' | 'ACTIVE_SESSION' | 'SUMMARY';
 
 interface WorkoutProps {
   autoStart?: boolean;
@@ -17,6 +17,7 @@ interface WorkoutProps {
   onGoToSettings: () => void;
   nutritionLogs: NutritionLog[];
   onDeleteNutrition: (id: string) => Promise<void>;
+  language: Language;
 }
 
 // Singleton AudioContext to prevent browser limits
@@ -85,7 +86,8 @@ const Workout: React.FC<WorkoutProps> = ({
     userProfile, 
     onGoToSettings,
     nutritionLogs,
-    onDeleteNutrition
+    onDeleteNutrition,
+    language
 }) => {
   const [mode, setMode] = useState<Mode>('TIMETABLE');
   const [schedule, setSchedule] = useState<ScheduledWorkout[]>([]);
@@ -129,6 +131,9 @@ const Workout: React.FC<WorkoutProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // Import Text State
+  const [importText, setImportText] = useState('');
+
   // Manual Create / Edit State
   const [manualPlanTitle, setManualPlanTitle] = useState('');
   const [manualExercises, setManualExercises] = useState<{name: string, sets: number, reps: string, weight: number, section: 'warmup' | 'main' | 'core'}[]>([]);
@@ -139,6 +144,78 @@ const Workout: React.FC<WorkoutProps> = ({
   const [eventType, setEventType] = useState<'ACTIVITY' | 'WORKOUT'>('WORKOUT');
   const [newEventData, setNewEventData] = useState<{title: string, time: string, description: string}>({title: '', time: '09:00', description: ''});
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+
+  // Translations Map
+  const t = {
+    zh: {
+        timetable: '時間表',
+        library: '課表庫',
+        warmup: '熱身',
+        main: '主訓練',
+        core: '核心 / 收操',
+        start: '開始',
+        resting: '休息中',
+        workoutProgress: '訓練進行中',
+        finish: '結束訓練',
+        skip: '跳過',
+        done: '完成！',
+        save: '儲存紀錄',
+        manual: '手動建立課表',
+        ai: 'AI 智慧排課',
+        import: '貼上文字匯入課表',
+        createPlan: '生成課表',
+        generating: 'AI 思考中...',
+        analyzing: '自動轉換為課表',
+        planName: '課表名稱',
+        addExercise: '新增動作',
+        savePlan: '儲存課表',
+        updatePlan: '更新課表',
+        noEvents: '暫無行程，點擊右上角 "+" 新增活動或選擇課表。',
+        confirmDelete: '確認刪除？',
+        delete: '刪除',
+        cancel: '取消',
+        addToSchedule: '加入行程',
+        edit: '編輯',
+        overview: '當日行程概覽',
+        addActivity: '新增至時間表',
+        workout: '安排訓練',
+        activity: '一般活動',
+    },
+    en: {
+        timetable: 'Timetable',
+        library: 'Library',
+        warmup: 'Warmup',
+        main: 'Main Workout',
+        core: 'Core / Cooldown',
+        start: 'Start',
+        resting: 'Resting',
+        workoutProgress: 'In Progress',
+        finish: 'Finish',
+        skip: 'Skip',
+        done: 'Completed!',
+        save: 'Save Record',
+        manual: 'Manual Create',
+        ai: 'AI Generator',
+        import: 'Import from Text',
+        createPlan: 'Generate Plan',
+        generating: 'Thinking...',
+        analyzing: 'Convert to Plan',
+        planName: 'Plan Name',
+        addExercise: 'Add Exercise',
+        savePlan: 'Save Plan',
+        updatePlan: 'Update Plan',
+        noEvents: 'No events. Click "+" to add activity or workout.',
+        confirmDelete: 'Confirm Delete?',
+        delete: 'Delete',
+        cancel: 'Cancel',
+        addToSchedule: 'Add to Schedule',
+        edit: 'Edit',
+        overview: 'Daily Overview',
+        addActivity: 'Add to Schedule',
+        workout: 'Workout',
+        activity: 'Activity',
+    }
+  }[language];
 
   // Initial Data Load
   useEffect(() => {
@@ -450,12 +527,10 @@ const Workout: React.FC<WorkoutProps> = ({
       };
   };
 
-  const callOpenAI = async () => {
+  const callOpenAI = async (prompt: string, systemPrompt: string = "") => {
         const { apiKey, baseUrl, model } = getDeepSeekConfig();
 
         if (!apiKey) throw new Error("API Key 缺失。請至設定頁面配置 API Key。");
-
-        const systemPrompt = `Create a workout plan based on the request. Return strictly valid JSON with structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`;
 
         const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
@@ -467,7 +542,7 @@ const Workout: React.FC<WorkoutProps> = ({
                 model: model,
                 messages: [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: aiPrompt }
+                    { role: 'user', content: prompt }
                 ],
                 response_format: { type: 'json_object' }
             })
@@ -482,14 +557,14 @@ const Workout: React.FC<WorkoutProps> = ({
         return JSON.parse(cleanJson(data.choices[0].message.content));
   };
 
-  const callGemini = async () => {
+  const callGemini = async (prompt: string) => {
       const apiKey = getApiKey();
       if (!apiKey) throw new Error("系統未偵測到 Google API Key。");
       
       const ai = new GoogleGenAI({ apiKey: apiKey });
       const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: `Create a workout plan based on this request: "${aiPrompt}". Return strictly JSON. Structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`,
+            contents: prompt,
             config: { responseMimeType: "application/json" }
       });
       return JSON.parse(cleanJson(response.text || "{}"));
@@ -502,11 +577,19 @@ const Workout: React.FC<WorkoutProps> = ({
       try {
           let result;
           const { apiKey } = getDeepSeekConfig();
+          const targetLang = language === 'zh' ? 'Traditional Chinese (繁體中文)' : 'English';
+          const systemPrompt = `Create a workout plan based on the request. 
+          **Output Language**: Strictly output all text (titles, exercise names, focus) in ${targetLang}.
+          Return strictly valid JSON with structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`;
+          
+          const userPromptMsg = aiPrompt;
 
           if (userProfile.aiProvider === 'openai' || apiKey) {
-               result = await callOpenAI();
+               result = await callOpenAI(userPromptMsg, systemPrompt);
           } else {
-               result = await callGemini();
+               result = await callGemini(`Create a workout plan based on this request: "${userPromptMsg}". 
+               **Output Language**: Strictly output all text (titles, exercise names, focus) in ${targetLang}.
+               Return strictly JSON. Structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`);
           }
           
           if (result.title) {
@@ -542,6 +625,75 @@ const Workout: React.FC<WorkoutProps> = ({
           } else {
                setAiError("生成失敗: " + msg);
           }
+      } finally {
+          setIsGenerating(false);
+      }
+  };
+
+  // --- Import Text Plan ---
+  const handleImportTextPlan = async () => {
+      if (!importText.trim()) return;
+      setAiError(null);
+      setIsGenerating(true);
+      try {
+          const targetLang = language === 'zh' ? 'Traditional Chinese (繁體中文)' : 'English';
+          const systemPrompt = `Analyze the unstructured workout text provided by the user. 
+          Goal: Convert it into a structured JSON workout plan.
+          
+          Rules for Analysis:
+          1. Extract a suitable Title (e.g., "Imported Chest Day").
+          2. Identify Target Focus (e.g., "Chest/Back").
+          3. Extract Exercises with Sets and Reps. If "reps" is a range (e.g., "8-12"), keep it as a string.
+          4. **CRITICAL**: Classify each exercise into one of three sections:
+             - "warmup": Exercises explicitly labeled as warmup, mobility, activation, or dynamic stretching.
+             - "core": Exercises labeled as core, abs, plank, OR **Cooldown/Stretching** exercises at the end of the list.
+             - "main": All other resistance training exercises.
+          5. **Output Language**: Strictly output all text (titles, exercise names, focus) in ${targetLang}. Translate if necessary.
+          
+          JSON Structure:
+          { 
+            "title": "String", 
+            "focus": "String", 
+            "duration": 60, 
+            "exercises": [ 
+              { "name": "String", "sets": Number, "reps": "String", "section": "warmup" | "main" | "core" } 
+            ] 
+          }`;
+
+          const prompt = `Convert this text to workout JSON: \n\n${importText}`;
+          let result;
+          const { apiKey } = getDeepSeekConfig();
+
+          if (userProfile.aiProvider === 'openai' || apiKey) {
+              result = await callOpenAI(prompt, systemPrompt);
+          } else {
+              result = await callGemini(systemPrompt + "\n\n" + prompt);
+          }
+
+          if (result.title) {
+               const newPlan: DailyPlan = {
+                  id: 'imp_' + Date.now(),
+                  title: result.title,
+                  focus: result.focus || 'Imported',
+                  duration: result.duration || 60,
+                  exercises: result.exercises.map((e: any, i: number) => ({
+                      id: `iex_${i}`,
+                      name: e.name,
+                      sets: e.sets || 3,
+                      reps: e.reps || "10",
+                      section: e.section || 'main',
+                      completed: false
+                  }))
+              };
+              
+              updateAndSavePlans([...allPlans, newPlan]);
+              setImportText('');
+              setMode('PLANS');
+          }
+
+      } catch (e: any) {
+          console.error("Import failed", e);
+          setAiError("匯入失敗: " + (e.message || "無法解析文字"));
       } finally {
           setIsGenerating(false);
       }
@@ -596,7 +748,7 @@ const Workout: React.FC<WorkoutProps> = ({
                   return {
                       ...p,
                       title: manualPlanTitle,
-                      focus: "自訂訓練",
+                      focus: language === 'zh' ? "自訂訓練" : "Custom Workout",
                       exercises: manualExercises.map((e, i) => ({
                           id: `mex_${editingPlanId}_${i}`, // keep somewhat stable or reset
                           name: e.name || '未命名動作',
@@ -616,7 +768,7 @@ const Workout: React.FC<WorkoutProps> = ({
           const newPlan: DailyPlan = {
               id: 'man_' + Date.now(),
               title: manualPlanTitle,
-              focus: "自訂訓練",
+              focus: language === 'zh' ? "自訂訓練" : "Custom Workout",
               duration: 60,
               exercises: manualExercises.map((e, i) => ({
                   id: `mex_${i}`,
@@ -860,19 +1012,19 @@ const Workout: React.FC<WorkoutProps> = ({
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                           <Timer size={14} className={isResting ? "text-cta-orange animate-pulse" : ""} />
                           {isResting ? (
-                              <span className="font-bold text-cta-orange">休息中 {restTimer}s</span>
+                              <span className="font-bold text-cta-orange">{t.resting} {restTimer}s</span>
                           ) : (
-                              <span>訓練進行中</span>
+                              <span>{t.workoutProgress}</span>
                           )}
                       </div>
                   </div>
-                  <button onClick={handleFinishSession} className="bg-neon-green text-charcoal-900 font-bold px-4 py-2 rounded-lg text-sm shadow-lg shadow-neon-green/20">結束訓練</button>
+                  <button onClick={handleFinishSession} className="bg-neon-green text-charcoal-900 font-bold px-4 py-2 rounded-lg text-sm shadow-lg shadow-neon-green/20">{t.finish}</button>
               </div>
 
               <div className="space-y-2">
-                  {renderExerciseGroup("熱身", warmupEx, "text-orange-400", <Flame size={16}/>)}
-                  {renderExerciseGroup("主訓練", mainEx, "text-neon-blue", <Dumbbell size={16}/>)}
-                  {renderExerciseGroup("核心", coreEx, "text-purple-400", <RotateCcw size={16}/>)}
+                  {renderExerciseGroup(t.warmup, warmupEx, "text-orange-400", <Flame size={16}/>)}
+                  {renderExerciseGroup(t.main, mainEx, "text-neon-blue", <Dumbbell size={16}/>)}
+                  {renderExerciseGroup(t.core, coreEx, "text-purple-400", <RotateCcw size={16}/>)}
               </div>
 
               {isResting && (
@@ -889,7 +1041,7 @@ const Workout: React.FC<WorkoutProps> = ({
                               <Plus size={16} />
                           </button>
                           <button onClick={() => setIsResting(false)} className="px-3 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 text-red-400 font-bold text-sm">
-                              Skip
+                              {t.skip}
                           </button>
                       </div>
                   </div>
@@ -909,7 +1061,7 @@ const Workout: React.FC<WorkoutProps> = ({
               </div>
               
               <div className="space-y-2">
-                  <h2 className="text-3xl font-black text-gray-800 dark:text-white">訓練完成！</h2>
+                  <h2 className="text-3xl font-black text-gray-800 dark:text-white">{t.done}</h2>
                   <p className="text-gray-500">{activePlan.title}</p>
               </div>
 
@@ -940,7 +1092,7 @@ const Workout: React.FC<WorkoutProps> = ({
                   onClick={handleConfirmFinish}
                   className="w-full max-w-sm bg-neon-green hover:bg-lime-400 text-charcoal-900 font-bold py-4 rounded-xl shadow-lg shadow-neon-green/20 transition-all active:scale-95"
               >
-                  儲存紀錄
+                  {t.save}
               </button>
           </div>
       );
@@ -955,13 +1107,13 @@ const Workout: React.FC<WorkoutProps> = ({
                 onClick={() => setMode('TIMETABLE')}
                 className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${mode === 'TIMETABLE' ? 'bg-white dark:bg-charcoal-900 shadow text-charcoal-900 dark:text-white' : 'text-gray-500'}`}
             >
-                <CalendarIcon size={16} /> 時間表
+                <CalendarIcon size={16} /> {t.timetable}
             </button>
             <button 
                 onClick={() => setMode('PLANS')}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${mode === 'PLANS' || mode === 'CREATE' || mode === 'MANUAL_CREATE' ? 'bg-white dark:bg-charcoal-900 shadow text-charcoal-900 dark:text-white' : 'text-gray-500'}`}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${mode === 'PLANS' || mode === 'CREATE' || mode === 'MANUAL_CREATE' || mode === 'IMPORT_TEXT' ? 'bg-white dark:bg-charcoal-900 shadow text-charcoal-900 dark:text-white' : 'text-gray-500'}`}
             >
-                <List size={16} /> 課表庫
+                <List size={16} /> {t.library}
             </button>
         </div>
 
@@ -998,7 +1150,7 @@ const Workout: React.FC<WorkoutProps> = ({
                                 {selectedDate}
                                 {HK_HOLIDAYS[selectedDate] && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full">{HK_HOLIDAYS[selectedDate]}</span>}
                             </h3>
-                            <p className="text-sm text-gray-500">當日行程概覽</p>
+                            <p className="text-sm text-gray-500">{t.overview}</p>
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => setShowAddEventModal(true)} className="p-2 bg-gray-100 dark:bg-charcoal-700 rounded-full text-gray-600 dark:text-gray-300 hover:bg-neon-blue hover:text-charcoal-900 transition-colors" title="Add Activity">
@@ -1034,7 +1186,7 @@ const Workout: React.FC<WorkoutProps> = ({
                                                 }}
                                                 className="text-xs bg-cta-orange text-white px-3 py-1.5 rounded-full font-bold shadow-lg shadow-orange-500/20"
                                             >
-                                                開始
+                                                {t.start}
                                             </button>
                                         )}
                                         {item.type === 'ACTIVITY' ? (
@@ -1066,7 +1218,7 @@ const Workout: React.FC<WorkoutProps> = ({
 
                         {getTimelineItems().length === 0 && (
                             <div className="pl-10 text-gray-400 text-sm py-4">
-                                暫無行程，點擊右上角 "+" 新增活動或選擇課表。
+                                {t.noEvents}
                             </div>
                         )}
                     </div>
@@ -1131,16 +1283,64 @@ const Workout: React.FC<WorkoutProps> = ({
                         className="w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-charcoal-600 text-gray-500 font-bold flex flex-col items-center justify-center gap-2 hover:border-neon-blue hover:text-neon-blue transition-colors"
                         type="button"
                      >
-                         <PenTool size={20} /> 手動建立課表
+                         <PenTool size={20} /> {t.manual}
                      </button>
                      <button 
                         onClick={() => setMode('CREATE')}
                         className="w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-charcoal-600 text-gray-500 font-bold flex flex-col items-center justify-center gap-2 hover:border-cta-orange hover:text-cta-orange transition-colors"
                         type="button"
                      >
-                         <Sparkles size={20} /> AI 智慧排課
+                         <Sparkles size={20} /> {t.ai}
+                     </button>
+                     <button 
+                        onClick={() => setMode('IMPORT_TEXT')}
+                        className="col-span-2 w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-charcoal-600 text-gray-500 font-bold flex items-center justify-center gap-2 hover:border-neon-purple hover:text-neon-purple transition-colors"
+                        type="button"
+                     >
+                         <ClipboardPaste size={20} /> {t.import}
                      </button>
                  </div>
+            </div>
+        )}
+
+        {/* Text Import Mode */}
+        {mode === 'IMPORT_TEXT' && (
+            <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-lg flex items-center gap-2"><ClipboardPaste className="text-neon-purple" /> {t.import}</h3>
+                    <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
+                </div>
+                <div className="space-y-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {language === 'zh' 
+                            ? "直接貼上您的訓練計畫（例如從教練的訊息或網路文章）。AI 會自動分析動作、組數與次數，並將熱身與收操動作分類。"
+                            : "Paste your workout plan here (e.g., from messages or articles). AI will analyze exercises, sets, and reps, and categorize warmup/cooldown sections."}
+                    </p>
+                    <textarea 
+                        value={importText} 
+                        onChange={(e) => { setImportText(e.target.value); setAiError(null); }} 
+                        placeholder={language === 'zh' ? `例如：\n熱身：肩袖內外旋 2組15下\n槓鈴划船 4組12下\n...\n結束：上斜方拉伸 30秒` : `e.g.:\nWarmup: Rotator cuff 2x15\nBarbell Row 4x12\n...\nEnd: Upper trap stretch 30s`} 
+                        className="w-full h-48 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-purple resize-none font-mono text-sm" 
+                    />
+                    
+                    {aiError && (
+                        <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 text-xs rounded-lg flex flex-col items-start gap-2 w-full">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangle size={14} className="shrink-0" />
+                                <span>{aiError}</span>
+                            </div>
+                        </div>
+                    )}
+
+                    <button 
+                        onClick={handleImportTextPlan} 
+                        disabled={isGenerating || !importText.trim()} 
+                        className="w-full bg-neon-purple text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-purple-600 transition-colors"
+                    >
+                        {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}
+                        {isGenerating ? t.generating : t.analyzing}
+                    </button>
+                </div>
             </div>
         )}
 
@@ -1152,9 +1352,9 @@ const Workout: React.FC<WorkoutProps> = ({
                         <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-3 text-red-500">
                             <Trash2 size={24} />
                         </div>
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">確認刪除？</h3>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t.confirmDelete}</h3>
                         <p className="text-sm text-gray-500 mt-1">
-                            您確定要刪除{deleteConfirmation.type === 'PLAN' ? '課表' : deleteConfirmation.type === 'MEAL' ? '飲食記錄' : '項目'}「<span className="font-bold text-gray-800 dark:text-gray-200">{deleteConfirmation.title}</span>」嗎？<br/>此動作無法復原。
+                            {deleteConfirmation.type === 'PLAN' ? 'Plan' : deleteConfirmation.type === 'MEAL' ? 'Log' : 'Item'} <span className="font-bold text-gray-800 dark:text-gray-200">"{deleteConfirmation.title}"</span>?
                         </p>
                     </div>
                     <div className="flex gap-3">
@@ -1162,13 +1362,13 @@ const Workout: React.FC<WorkoutProps> = ({
                             onClick={() => setDeleteConfirmation({ isOpen: false, type: 'PLAN', id: null, title: '' })}
                             className="flex-1 py-2.5 rounded-xl font-bold bg-gray-100 dark:bg-charcoal-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-charcoal-600 transition-colors"
                         >
-                            取消
+                            {t.cancel}
                         </button>
                         <button 
                             onClick={executeDelete}
                             className="flex-1 py-2.5 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
                         >
-                            確認刪除
+                            {t.delete}
                         </button>
                     </div>
                 </div>
@@ -1180,18 +1380,18 @@ const Workout: React.FC<WorkoutProps> = ({
             <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in space-y-6">
                 <div className="flex justify-between items-center mb-2">
                     <h3 className="font-bold text-lg flex items-center gap-2">
-                        <PenTool className="text-neon-blue" /> {editingPlanId ? '編輯課表' : '手動建立課表'}
+                        <PenTool className="text-neon-blue" /> {editingPlanId ? t.edit : t.manual}
                     </h3>
                     <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
                 </div>
 
                 <div>
-                    <label className="text-xs font-bold text-gray-500 mb-1 block">課表名稱</label>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">{t.planName}</label>
                     <input 
                         type="text" 
                         value={manualPlanTitle} 
                         onChange={e => setManualPlanTitle(e.target.value)}
-                        placeholder="例如: 腿部轟炸日"
+                        placeholder="e.g. Leg Day"
                         className="w-full p-3 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue"
                     />
                 </div>
@@ -1200,7 +1400,7 @@ const Workout: React.FC<WorkoutProps> = ({
                     <div key={section} className="space-y-2">
                         <div className="flex justify-between items-center bg-gray-100 dark:bg-charcoal-900 p-2 rounded-lg">
                             <h4 className="text-sm font-bold uppercase text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                                {section === 'warmup' ? <><Flame size={14} className="text-orange-400"/> 熱身</> : section === 'main' ? <><Dumbbell size={14} className="text-neon-blue"/> 主訓練</> : <><RotateCcw size={14} className="text-purple-400"/> 核心</>}
+                                {section === 'warmup' ? <><Flame size={14} className="text-orange-400"/> {t.warmup}</> : section === 'main' ? <><Dumbbell size={14} className="text-neon-blue"/> {t.main}</> : <><RotateCcw size={14} className="text-purple-400"/> {t.core}</>}
                             </h4>
                             <button onClick={() => addManualExercise(section as any)} className="text-xs bg-white dark:bg-charcoal-800 px-2 py-1 rounded shadow-sm hover:text-neon-blue border border-gray-200 dark:border-charcoal-700"><Plus size={12} /></button>
                         </div>
@@ -1210,21 +1410,21 @@ const Workout: React.FC<WorkoutProps> = ({
                             const actualIdx = manualExercises.indexOf(ex);
                             return (
                                 <div key={actualIdx} className="grid grid-cols-12 gap-2 items-center">
-                                    <input type="text" placeholder="動作名稱" value={ex.name} onChange={e => updateManualExercise(actualIdx, 'name', e.target.value)} className="col-span-5 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs outline-none focus:border-neon-blue"/>
+                                    <input type="text" placeholder="Name" value={ex.name} onChange={e => updateManualExercise(actualIdx, 'name', e.target.value)} className="col-span-5 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs outline-none focus:border-neon-blue"/>
                                     <input type="number" placeholder="kg" value={ex.weight} onChange={e => updateManualExercise(actualIdx, 'weight', parseFloat(e.target.value))} className="col-span-2 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs text-center outline-none focus:border-neon-blue"/>
-                                    <input type="number" placeholder="組" value={ex.sets} onChange={e => updateManualExercise(actualIdx, 'sets', parseInt(e.target.value))} className="col-span-2 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs text-center outline-none focus:border-neon-blue"/>
-                                    <input type="text" placeholder="次" value={ex.reps} onChange={e => updateManualExercise(actualIdx, 'reps', e.target.value)} className="col-span-2 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs text-center outline-none focus:border-neon-blue"/>
+                                    <input type="number" placeholder="sets" value={ex.sets} onChange={e => updateManualExercise(actualIdx, 'sets', parseInt(e.target.value))} className="col-span-2 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs text-center outline-none focus:border-neon-blue"/>
+                                    <input type="text" placeholder="reps" value={ex.reps} onChange={e => updateManualExercise(actualIdx, 'reps', e.target.value)} className="col-span-2 p-2 rounded bg-gray-50 dark:bg-charcoal-900/50 border border-gray-200 dark:border-charcoal-700 text-xs text-center outline-none focus:border-neon-blue"/>
                                     <button onClick={() => removeManualExercise(actualIdx)} className="col-span-1 flex justify-center text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
                                 </div>
                             );
                         })}
-                        {manualExercises.filter(e => e.section === section).length === 0 && <div className="text-xs text-gray-400 text-center py-2">無動作</div>}
+                        {manualExercises.filter(e => e.section === section).length === 0 && <div className="text-xs text-gray-400 text-center py-2">--</div>}
                     </div>
                 ))}
 
                 <button onClick={handleSaveManualPlan} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-transform mt-4 flex items-center justify-center gap-2">
                     <Save size={18} />
-                    {editingPlanId ? '更新課表' : '儲存課表'}
+                    {editingPlanId ? t.updatePlan : t.savePlan}
                 </button>
             </div>
         )}
@@ -1233,20 +1433,25 @@ const Workout: React.FC<WorkoutProps> = ({
         {mode === 'CREATE' && (
             <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-lg flex items-center gap-2"><Sparkles className="text-cta-orange" /> AI 智慧排課</h3>
+                    <h3 className="font-bold text-lg flex items-center gap-2"><Sparkles className="text-cta-orange" /> {t.ai}</h3>
                     <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
                 </div>
                 <div className="space-y-4">
                     <div className="text-xs text-gray-500 bg-gray-100 dark:bg-charcoal-900 p-2 rounded flex items-center gap-2">
-                        <span className="shrink-0">使用模型:</span>
+                        <span className="shrink-0">Model:</span>
                         <span className={`font-bold px-2 py-0.5 rounded ${userProfile.aiProvider === 'openai' ? 'bg-neon-purple/10 text-neon-purple' : 'bg-neon-blue/10 text-neon-blue'}`}>
                             {userProfile.aiProvider === 'openai' ? 'OpenAI / DeepSeek' : 'Google Gemini'}
                         </span>
                         {userProfile.aiProvider === 'openai' && !userProfile.openaiApiKey && !getDeepSeekConfig().apiKey && (
-                            <span className="text-red-500 text-[10px] ml-auto flex items-center gap-1"><AlertTriangle size={10}/> 未設定 API Key</span>
+                            <span className="text-red-500 text-[10px] ml-auto flex items-center gap-1"><AlertTriangle size={10}/> No API Key</span>
                         )}
                     </div>
-                    <textarea value={aiPrompt} onChange={(e) => { setAiPrompt(e.target.value); setAiError(null); }} placeholder="例如：我只有30分鐘，想練胸肌和三頭肌..." className="w-full h-32 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange resize-none" />
+                    <textarea 
+                        value={aiPrompt} 
+                        onChange={(e) => { setAiPrompt(e.target.value); setAiError(null); }} 
+                        placeholder={language === 'zh' ? "例如：我只有30分鐘，想練胸肌和三頭肌..." : "e.g., I have 30 mins, want to train chest and triceps..."} 
+                        className="w-full h-32 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange resize-none" 
+                    />
                     {aiError && (
                         <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 text-xs rounded-lg flex flex-col items-start gap-2 w-full">
                             <div className="flex items-center gap-2">
@@ -1254,11 +1459,11 @@ const Workout: React.FC<WorkoutProps> = ({
                                 <span>{aiError}</span>
                             </div>
                             {aiError.includes("設定") && (
-                                <button onClick={onGoToSettings} className="underline font-bold text-red-600 dark:text-red-400">前往設定</button>
+                                <button onClick={onGoToSettings} className="underline font-bold text-red-600 dark:text-red-400">Settings</button>
                             )}
                         </div>
                     )}
-                    <button onClick={handleGeneratePlan} disabled={isGenerating || !aiPrompt.trim()} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">{isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}{isGenerating ? 'AI 思考中...' : '生成課表'}</button>
+                    <button onClick={handleGeneratePlan} disabled={isGenerating || !aiPrompt.trim()} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">{isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}{isGenerating ? t.generating : t.createPlan}</button>
                 </div>
             </div>
         )}
@@ -1268,7 +1473,7 @@ const Workout: React.FC<WorkoutProps> = ({
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                 <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6 animate-fade-in">
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-bold text-lg">新增至時間表</h3>
+                        <h3 className="font-bold text-lg">{t.addActivity}</h3>
                         <button onClick={() => setShowAddEventModal(false)}><X size={20} className="text-gray-400"/></button>
                     </div>
 
@@ -1278,20 +1483,20 @@ const Workout: React.FC<WorkoutProps> = ({
                             onClick={() => setEventType('WORKOUT')}
                             className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${eventType === 'WORKOUT' ? 'bg-white dark:bg-charcoal-700 shadow text-cta-orange' : 'text-gray-500'}`}
                         >
-                            安排訓練
+                            {t.workout}
                         </button>
                         <button 
                             onClick={() => setEventType('ACTIVITY')}
                             className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${eventType === 'ACTIVITY' ? 'bg-white dark:bg-charcoal-700 shadow text-neon-blue' : 'text-gray-500'}`}
                         >
-                            一般活動
+                            {t.activity}
                         </button>
                     </div>
 
                     <div className="space-y-4">
                         {eventType === 'WORKOUT' ? (
                             <div>
-                                <label className="text-xs font-bold text-gray-500 mb-1 block">選擇課表</label>
+                                <label className="text-xs font-bold text-gray-500 mb-1 block">{t.library}</label>
                                 <select 
                                     className="w-full p-2 rounded-lg bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange"
                                     value={selectedPlanId}
@@ -1301,26 +1506,26 @@ const Workout: React.FC<WorkoutProps> = ({
                                         <option key={plan.id} value={plan.id}>{plan.title} ({plan.focus})</option>
                                     ))}
                                 </select>
-                                <p className="text-xs text-gray-400 mt-2">將加入至: {selectedDate}</p>
+                                <p className="text-xs text-gray-400 mt-2">Date: {selectedDate}</p>
                             </div>
                         ) : (
                             <>
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500 mb-1 block">活動名稱</label>
-                                    <input type="text" className="w-full p-2 rounded-lg bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue" placeholder="例如: 會議, 休息日..." value={newEventData.title} onChange={e => setNewEventData({...newEventData, title: e.target.value})} />
+                                    <label className="text-xs font-bold text-gray-500 mb-1 block">Name</label>
+                                    <input type="text" className="w-full p-2 rounded-lg bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue" placeholder="e.g. Meeting" value={newEventData.title} onChange={e => setNewEventData({...newEventData, title: e.target.value})} />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500 mb-1 block">時間</label>
+                                    <label className="text-xs font-bold text-gray-500 mb-1 block">Time</label>
                                     <input type="time" className="w-full p-2 rounded-lg bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue" value={newEventData.time} onChange={e => setNewEventData({...newEventData, time: e.target.value})} />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500 mb-1 block">備註 (選填)</label>
-                                    <input type="text" className="w-full p-2 rounded-lg bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue" placeholder="詳細內容..." value={newEventData.description} onChange={e => setNewEventData({...newEventData, description: e.target.value})} />
+                                    <label className="text-xs font-bold text-gray-500 mb-1 block">Description</label>
+                                    <input type="text" className="w-full p-2 rounded-lg bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-blue" placeholder="..." value={newEventData.description} onChange={e => setNewEventData({...newEventData, description: e.target.value})} />
                                 </div>
                             </>
                         )}
                         <button onClick={handleAddScheduleItem} className="w-full bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold py-3 rounded-xl mt-2">
-                            確認新增
+                            Add
                         </button>
                     </div>
                 </div>
