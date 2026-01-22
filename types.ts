@@ -105,6 +105,15 @@ export interface UserProfile {
   goal: 'lose_weight' | 'maintain' | 'gain_muscle';
   avatar?: string; // Base64 image string
   
+  // Custom Nutrition Targets (Optional)
+  customTargets?: {
+      enabled: boolean;
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+  };
+  
   // AI Configuration
   aiProvider?: 'google' | 'openai'; // google (Gemini) or openai (Standard/DeepSeek)
   openaiApiKey?: string;

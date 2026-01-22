@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { View, NutritionLog, UserProfile, WorkoutRecord, Language } from './types';
+import { View, NutritionLog, UserProfile, WorkoutRecord, Language, DailyPlan } from './types';
 import { NUTRITION_LOGS, MOCK_HISTORY, USER_PROFILE } from './constants';
 import { apiGetUserProfile, apiSaveUserProfile, apiGetWorkoutHistory, apiSaveWorkoutRecord, apiGetNutritionLogs, apiSyncNutritionState, apiDeleteWorkoutRecord, apiDeleteNutritionLog, apiGetSystemKeys } from './lib/db';
 import { auth, onAuthStateChanged, signOut } from './lib/firebase'; // Updated import to include signOut
@@ -25,6 +25,7 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [language, setLanguage] = useState<Language>('zh'); // Default Language
   const [autoStartWorkout, setAutoStartWorkout] = useState<boolean>(false);
+  const [planToRepeat, setPlanToRepeat] = useState<DailyPlan | null>(null);
   
   // State for Data
   const [nutritionLogs, setNutritionLogs] = useState<NutritionLog[]>([]);
@@ -135,6 +136,28 @@ const App: React.FC = () => {
     setCurrentView(View.WORKOUT);
   };
 
+  // Convert Record back to Plan for repetition
+  const handleRepeatWorkout = (record: WorkoutRecord) => {
+      const plan: DailyPlan = {
+          id: `repeat_${Date.now()}`,
+          title: record.type,
+          focus: 'Repeated Session',
+          duration: record.duration,
+          exercises: record.details ? record.details.map((d, i) => ({
+              id: `ex_r_${i}`,
+              name: d.exerciseName,
+              sets: d.sets.length,
+              reps: d.sets[0].reps.toString(), // Estimate based on first set
+              weight: d.sets.some(s => s.weight > 0) ? Math.max(...d.sets.map(s => s.weight)) : 0, // Suggest max weight used
+              completed: false,
+              section: 'main'
+          })) : []
+      };
+      setPlanToRepeat(plan);
+      setAutoStartWorkout(true);
+      setCurrentView(View.WORKOUT);
+  };
+
   const handleSaveProfile = async (profile: UserProfile) => {
     setUserProfile(profile);
     if (!isAdmin) {
@@ -235,17 +258,27 @@ const App: React.FC = () => {
           <Dashboard 
             onStartWorkout={handleStartQuickWorkout} 
             nutritionLogs={nutritionLogs}
+            historyLogs={historyLogs}
             userProfile={userProfile!}
             language={language}
           />
         );
       case View.HISTORY:
-        return <History logs={historyLogs} onDeleteRecord={handleDeleteRecord} />;
+        return (
+            <History 
+                logs={historyLogs} 
+                onDeleteRecord={handleDeleteRecord} 
+                onRepeatWorkout={handleRepeatWorkout}
+            />
+        );
       case View.WORKOUT:
         return (
           <Workout 
             autoStart={autoStartWorkout} 
-            onAutoStartConsumed={() => setAutoStartWorkout(false)} 
+            onAutoStartConsumed={() => {
+                setAutoStartWorkout(false);
+                setPlanToRepeat(null);
+            }}
             onFinishWorkout={handleFinishWorkout}
             historyLogs={historyLogs} 
             userProfile={userProfile!} 
@@ -253,6 +286,7 @@ const App: React.FC = () => {
             nutritionLogs={nutritionLogs}
             onDeleteNutrition={handleDeleteNutrition}
             language={language}
+            externalPlanToStart={planToRepeat} // Pass the plan to start
           />
         );
       case View.PROGRESS:
@@ -278,7 +312,7 @@ const App: React.FC = () => {
             />
           );
       default:
-        return <Dashboard onStartWorkout={handleStartQuickWorkout} nutritionLogs={nutritionLogs} userProfile={userProfile!} language={language} />;
+        return <Dashboard onStartWorkout={handleStartQuickWorkout} nutritionLogs={nutritionLogs} historyLogs={historyLogs} userProfile={userProfile!} language={language} />;
     }
   };
 

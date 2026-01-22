@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download, Bot, Key, Globe, Cpu, ShieldAlert, Check, Sparkles } from 'lucide-react';
+import { Upload, User, Ruler, Weight, Target, Save, LogOut, Download, Bot, Key, Globe, Cpu, ShieldAlert, Check, Sparkles, Utensils } from 'lucide-react';
 import { apiSaveSystemKeys } from '../lib/db';
 
 interface ProfileSettingsProps {
@@ -103,6 +103,24 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
     setTimeout(() => setIsSaved(false), 2000);
   };
 
+  const toggleCustomTargets = () => {
+      if (profile.customTargets?.enabled) {
+          setProfile({ ...profile, customTargets: { ...profile.customTargets, enabled: false } });
+      } else {
+          // Initialize with current estimate if not set
+          setProfile({ 
+              ...profile, 
+              customTargets: { 
+                  enabled: true, 
+                  calories: 2000, 
+                  protein: 150, 
+                  carbs: 200, 
+                  fat: 60 
+              } 
+          });
+      }
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-8 pb-10">
       <div className="flex items-center justify-between">
@@ -113,7 +131,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
           {isSaved && <span className="text-neon-green font-bold text-sm animate-fade-in flex items-center gap-1"><Check size={16}/> 已儲存變更！</span>}
       </div>
 
-      <div className="bg-white dark:bg-charcoal-800 rounded-2xl p-6 md:p-8 shadow-sm border border-gray-200 dark:border-gray-700 space-y-8">
+      <div className="bg-white dark:bg-charcoal-800 rounded-2xl p-6 md:p-8 shadow-sm border border-gray-200 dark:border-charcoal-700 space-y-8">
         
         {/* Avatar Section */}
         <div className="flex flex-col items-center">
@@ -223,6 +241,66 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
             </div>
         </div>
 
+        {/* Custom Nutrition Targets (New) */}
+        {!isAdmin && (
+            <div className="space-y-6">
+                <div className="flex items-center justify-between border-b border-gray-100 dark:border-charcoal-700 pb-2">
+                    <h3 className="text-lg font-bold flex items-center gap-2">
+                        <Utensils size={20} className="text-neon-green" /> 自訂營養目標
+                    </h3>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" checked={profile.customTargets?.enabled || false} onChange={toggleCustomTargets} />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-charcoal-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neon-green"></div>
+                    </label>
+                </div>
+
+                {profile.customTargets?.enabled ? (
+                    <div className="grid grid-cols-2 gap-4 animate-fade-in bg-gray-50 dark:bg-charcoal-900/50 p-4 rounded-xl border border-gray-200 dark:border-charcoal-700">
+                        <div className="col-span-2">
+                            <label className="block text-xs font-bold text-gray-500 mb-1">每日目標熱量 (kcal)</label>
+                            <input 
+                                type="number" 
+                                value={profile.customTargets.calories}
+                                onChange={(e) => setProfile({ ...profile, customTargets: { ...profile.customTargets!, calories: Number(e.target.value) } })}
+                                className="w-full p-2 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 font-bold text-center"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-neon-green mb-1">蛋白質 (g)</label>
+                            <input 
+                                type="number" 
+                                value={profile.customTargets.protein}
+                                onChange={(e) => setProfile({ ...profile, customTargets: { ...profile.customTargets!, protein: Number(e.target.value) } })}
+                                className="w-full p-2 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 font-bold text-center"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-neon-blue mb-1">碳水化合物 (g)</label>
+                            <input 
+                                type="number" 
+                                value={profile.customTargets.carbs}
+                                onChange={(e) => setProfile({ ...profile, customTargets: { ...profile.customTargets!, carbs: Number(e.target.value) } })}
+                                className="w-full p-2 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 font-bold text-center"
+                            />
+                        </div>
+                        <div className="col-span-2">
+                            <label className="block text-xs font-bold text-neon-purple mb-1">脂肪 (g)</label>
+                            <input 
+                                type="number" 
+                                value={profile.customTargets.fat}
+                                onChange={(e) => setProfile({ ...profile, customTargets: { ...profile.customTargets!, fat: Number(e.target.value) } })}
+                                className="w-full p-2 rounded-lg bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 font-bold text-center"
+                            />
+                        </div>
+                    </div>
+                ) : (
+                    <p className="text-xs text-gray-500">
+                        目前使用 TDEE 公式自動計算目標。開啟上方開關以手動設定您的營養需求。
+                    </p>
+                )}
+            </div>
+        )}
+
         {/* AI Configuration Section (ADMIN ONLY for Keys, User for Preference) */}
         <div className="space-y-6">
             <h3 className="text-lg font-bold border-b border-gray-100 dark:border-charcoal-700 pb-2 flex items-center gap-2">
@@ -255,6 +333,11 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                             OpenAI / DeepSeek
                         </button>
                     </div>
+                    {profile.aiProvider === 'openai' && (
+                        <p className="text-[10px] text-orange-500 mt-2 flex items-center gap-1 font-bold">
+                            <ShieldAlert size={12} /> 注意：DeepSeek/OpenAI 為付費 API，需確保帳戶內有餘額 (Credit) 才能使用，否則會出現餘額不足錯誤。
+                        </p>
+                    )}
                 </div>
 
                 {/* Only Admin can see and edit the actual Keys */}
@@ -367,7 +450,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
       </div>
       
       <div className="text-center text-xs text-gray-400">
-          Gohopro v1.3.1
+          Gohopro v1.3.2
       </div>
     </div>
   );

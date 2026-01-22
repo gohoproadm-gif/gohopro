@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Plus, Sparkles, Loader2, X, Check, Utensils, Flame, ChevronLeft, ChevronRight, Calendar, Pencil, Trash2, Save, RefreshCw, AlertTriangle, Settings } from 'lucide-react';
+import { Plus, Sparkles, Loader2, X, Check, Utensils, Flame, ChevronLeft, ChevronRight, Calendar, Pencil, Trash2, Save, RefreshCw, AlertTriangle, Settings, HeartPulse, Lightbulb, Clock } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { NutritionLog, UserProfile } from '../types';
 import { apiSaveNutritionLog, apiDeleteNutritionLog } from '../lib/db';
@@ -13,10 +13,14 @@ interface NutritionProps {
   onGoToSettings: () => void;
 }
 
-// Utility to clean JSON string from Markdown blocks
+// Utility to clean JSON string from Markdown blocks AND DeepSeek <think> tags
 const cleanJson = (text: string) => {
     if (!text) return "{}";
-    let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    // 1. Remove DeepSeek R1 <think> tags content
+    let clean = text.replace(/<think>[\s\S]*?<\/think>/g, '');
+    // 2. Remove Markdown code blocks
+    clean = clean.replace(/```json/g, '').replace(/```/g, '').trim();
+    // 3. Extract JSON object
     const firstBrace = clean.indexOf('{');
     const lastBrace = clean.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1) {
@@ -51,7 +55,8 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
       calories: 0,
       p: 0,
       c: 0,
-      f: 0
+      f: 0,
+      healthTip: ''
   });
 
   const resultRef = useRef<HTMLDivElement>(null);
@@ -59,6 +64,12 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
   const displayedLogs = useMemo(() => {
     return logs.filter(log => log.date === selectedDate);
   }, [logs, selectedDate]);
+
+  // Extract recent items for Quick Add
+  const recentItems = useMemo(() => {
+      const items = logs.map(l => l.item);
+      return [...new Set(items)].slice(0, 6); // Top 6 unique recent items
+  }, [logs]);
 
   const totals = useMemo(() => {
     return displayedLogs.reduce((acc, curr) => ({
@@ -85,6 +96,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
     }
   }, [formStep]);
 
+  // ... (API Keys & Config Helpers - kept same)
   // Robust API Key Retrieval (Updated for System Keys)
   const getApiKey = () => {
     // 1. Check System Key (Admin set)
@@ -145,12 +157,12 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
       };
   };
 
-  const callOpenAI = async () => {
+  const callOpenAI = async (input: string) => {
       const { apiKey, baseUrl, model } = getDeepSeekConfig();
 
       if (!apiKey) throw new Error("API Key 缺失");
 
-      const prompt = `Estimate the nutritional values for: "${foodInput}". 
+      const prompt = `Estimate the nutritional values for: "${input}". 
                        If the input is vague, make a reasonable standard estimation.
                        Return strictly valid JSON with this structure:
                        {
@@ -158,8 +170,20 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                           "calories": 500,
                           "protein": 20,
                           "carbs": 50,
-                          "fat": 15
+                          "fat": 15,
+                          "health_tip": "A very short, one-sentence health tip about this meal (Traditional Chinese)."
                        }`;
+
+      const body: any = {
+          model: model,
+          messages: [{ role: 'user', content: prompt }]
+      };
+
+      // DeepSeek R1 (reasoner) does NOT support response_format: json_object. 
+      // Only add it if model is NOT reasoner.
+      if (!model.includes('reasoner')) {
+          body.response_format = { type: 'json_object' };
+      }
 
       const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
           method: 'POST',
@@ -167,11 +191,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${apiKey}`
           },
-          body: JSON.stringify({
-              model: model,
-              messages: [{ role: 'user', content: prompt }],
-              response_format: { type: 'json_object' }
-          })
+          body: JSON.stringify(body)
       });
 
       if (!response.ok) {
@@ -184,14 +204,14 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
       return JSON.parse(cleanJson(content));
   };
 
-  const callGemini = async () => {
+  const callGemini = async (input: string) => {
       const apiKey = getApiKey();
       if (!apiKey) throw new Error("系統未偵測到 Google API Key。");
 
       const ai = new GoogleGenAI({ apiKey: apiKey });
       const response = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
-            contents: `Estimate the nutritional values for: "${foodInput}". 
+            contents: `Estimate the nutritional values for: "${input}". 
                        If the input is vague, make a reasonable standard estimation.
                        Return strictly JSON.`,
             config: {
@@ -203,17 +223,23 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                         calories: { type: Type.INTEGER, description: "Total calories (Energy)" },
                         protein: { type: Type.INTEGER, description: "Protein in grams" },
                         carbs: { type: Type.INTEGER, description: "Carbohydrates in grams" },
-                        fat: { type: Type.INTEGER, description: "Fat in grams" }
+                        fat: { type: Type.INTEGER, description: "Fat in grams" },
+                        health_tip: { type: Type.STRING, description: "A very short, one-sentence health tip about this meal (Traditional Chinese)." }
                     },
-                    required: ["item_name", "calories", "protein", "carbs", "fat"]
+                    required: ["item_name", "calories", "protein", "carbs", "fat", "health_tip"]
                 }
             }
         });
       return JSON.parse(cleanJson(response.text || "{}"));
   };
 
-  const handleAnalyzeFood = async () => {
-    if (!foodInput.trim()) return;
+  const handleAnalyzeFood = async (val?: string) => {
+    const inputToUse = val || foodInput;
+    if (!inputToUse.trim()) return;
+    
+    // If val was passed directly (quick add), update state too
+    if (val) setFoodInput(val);
+
     setAiError(null);
     setIsAnalyzing(true);
     setUsedModel('');
@@ -226,17 +252,23 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
         let used = '';
         if (userProfile.aiProvider === 'openai') {
             try {
-                result = await callOpenAI();
+                result = await callOpenAI(inputToUse);
                 used = 'DeepSeek';
             } catch (openAiErr: any) {
                 console.warn("DeepSeek/OpenAI failed, falling back to Gemini:", openAiErr);
-                setAiError(`DeepSeek 錯誤: ${openAiErr.message}。正在嘗試使用 Gemini 備援...`);
+                const msg = openAiErr.message || "";
+                if (msg.includes("Insufficient Balance")) {
+                    setAiError("DeepSeek 餘額不足 (需充值)。正嘗試切換至 Google Gemini...");
+                } else {
+                    setAiError(`DeepSeek 錯誤: ${msg}。正在嘗試使用 Gemini 備援...`);
+                }
+                
                 // Fallback to Gemini
-                result = await callGemini();
+                result = await callGemini(inputToUse);
                 used = 'Gemini (備援)';
             }
         } else {
-            result = await callGemini();
+            result = await callGemini(inputToUse);
             used = 'Gemini';
         }
 
@@ -247,7 +279,8 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                 calories: result.calories,
                 p: result.protein,
                 c: result.carbs,
-                f: result.fat
+                f: result.fat,
+                healthTip: result.health_tip || ''
             });
             setFormStep('RESULT');
             setAiError(null); // Clear error if success
@@ -276,6 +309,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
     }
   };
 
+  // ... (Other handlers like handleEditClick, handleDeleteClick, handleSave etc. remain same) ...
   const handleEditClick = (log: NutritionLog) => {
       setEditId(log.id);
       setFormData({
@@ -283,7 +317,8 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
           calories: log.calories,
           p: log.macros.p,
           c: log.macros.c,
-          f: log.macros.f
+          f: log.macros.f,
+          healthTip: ''
       });
       setFormStep('RESULT'); 
       setShowAddModal(true);
@@ -360,7 +395,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
       setFormStep('INPUT');
       setAiError(null);
       setUsedModel('');
-      setFormData({ item: '', calories: 0, p: 0, c: 0, f: 0 });
+      setFormData({ item: '', calories: 0, p: 0, c: 0, f: 0, healthTip: '' });
   };
 
   const handlePrevDay = () => {
@@ -377,6 +412,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
 
   return (
     <div className="space-y-6 pb-24 relative">
+      {/* ... (Header and Summary Card code remains same) ... */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h2 className="text-2xl font-bold">營養追蹤</h2>
@@ -386,7 +422,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
             </p>
         </div>
         
-        <div className="flex items-center gap-2 bg-white dark:bg-charcoal-800 p-1 rounded-full shadow-sm border border-gray-200 dark:border-gray-700 self-start md:self-auto">
+        <div className="flex items-center gap-2 bg-white dark:bg-charcoal-800 p-1 rounded-full shadow-sm border border-gray-200 dark:border-charcoal-700 self-start md:self-auto">
             <button onClick={handlePrevDay} className="p-2 hover:bg-gray-100 dark:hover:bg-charcoal-700 rounded-full text-gray-500"><ChevronLeft size={20} /></button>
             <div className="relative">
                 <input 
@@ -403,7 +439,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
             onClick={() => {
                 setEditId(null);
                 setFormStep('INPUT');
-                setFormData({ item: '', calories: 0, p: 0, c: 0, f: 0 });
+                setFormData({ item: '', calories: 0, p: 0, c: 0, f: 0, healthTip: '' });
                 setShowAddModal(true);
             }}
             className="bg-cta-orange hover:bg-cta-hover text-white p-3 rounded-full shadow-lg shadow-orange-500/30 active:scale-95 transition-all flex items-center gap-2 pr-5 self-end md:self-auto"
@@ -414,7 +450,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
       </div>
 
       {/* Summary Card */}
-      <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col md:flex-row items-center gap-8 animate-fade-in">
+      <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-charcoal-700 flex flex-col md:flex-row items-center gap-8 animate-fade-in">
          <div className="relative w-40 h-40 flex-shrink-0">
              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -500,7 +536,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
           </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal - kept same */}
       {deleteModal.isOpen && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                 <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
@@ -531,10 +567,10 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
             </div>
       )}
 
-      {/* Modal */}
+      {/* Add/Edit Modal */}
       {showAddModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
-              <div className="bg-white dark:bg-charcoal-800 w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[90dvh]">
+              <div className="bg-white dark:bg-charcoal-800 w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 dark:border-charcoal-700 overflow-hidden flex flex-col max-h-[90dvh]">
                   <div className="p-4 border-b border-gray-200 dark:border-charcoal-700 flex justify-between items-center bg-gray-50 dark:bg-charcoal-900 shrink-0">
                       <h3 className="font-bold text-lg flex items-center gap-2">
                           {editId ? <Pencil className="text-neon-blue" size={20} /> : <Sparkles className="text-cta-orange" size={20} />}
@@ -575,20 +611,36 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                                   )}
                               </div>
 
+                              {/* Recent Items Quick Add */}
+                              {recentItems.length > 0 && (
+                                  <div className="flex flex-wrap gap-2 animate-fade-in">
+                                      <span className="text-xs font-bold text-gray-400 flex items-center gap-1 w-full mb-1"><Clock size={12}/> 快速加入常用</span>
+                                      {recentItems.map((item, idx) => (
+                                          <button 
+                                            key={idx}
+                                            onClick={() => handleAnalyzeFood(item)}
+                                            className="text-xs bg-gray-100 dark:bg-charcoal-700 hover:bg-neon-blue/20 hover:text-neon-blue hover:border-neon-blue/50 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-full transition-all border border-transparent"
+                                          >
+                                              {item}
+                                          </button>
+                                      ))}
+                                  </div>
+                              )}
+
                               {aiError && (
                                 <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex flex-col items-start gap-2 text-red-500 text-xs animate-fade-in w-full">
                                     <div className="flex items-center gap-2">
                                         <AlertTriangle size={16} className="shrink-0" />
                                         <span className="break-words leading-relaxed font-bold">{aiError}</span>
                                     </div>
-                                    {aiError.includes("不支援") && (
-                                        <button onClick={onGoToSettings} className="underline ml-6">檢查 AI 設定</button>
+                                    {aiError.includes("餘額") && (
+                                        <button onClick={onGoToSettings} className="underline ml-6">前往設定切換 AI</button>
                                     )}
                                 </div>
                               )}
                               
                               <button 
-                                  onClick={handleAnalyzeFood}
+                                  onClick={() => handleAnalyzeFood()}
                                   disabled={isAnalyzing || !foodInput.trim()}
                                   className="w-full bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.02]"
                               >
@@ -598,6 +650,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                           </div>
                       )}
 
+                      {/* ... (Result Step remains same) ... */}
                       {formStep === 'RESULT' && (
                           <div ref={resultRef} className="animate-fade-in space-y-5">
                               {!editId && (
@@ -607,6 +660,15 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
                                 >
                                     <ChevronLeft size={14} /> 返回輸入
                                 </button>
+                              )}
+
+                              {formData.healthTip && (
+                                  <div className="p-3 bg-neon-green/10 border border-neon-green/30 rounded-xl flex gap-3 items-start">
+                                      <Lightbulb size={20} className="text-neon-green shrink-0 mt-0.5" />
+                                      <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed font-medium">
+                                          {formData.healthTip}
+                                      </p>
+                                  </div>
                               )}
 
                               <div>

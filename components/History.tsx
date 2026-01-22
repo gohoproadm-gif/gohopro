@@ -1,14 +1,15 @@
 
 import React, { useState, useMemo } from 'react';
 import { WorkoutRecord } from '../types';
-import { Calendar, CheckCircle, Clock, Flame, Filter, Inbox, ChevronDown, ChevronUp, Dumbbell, Trash2 } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, Flame, Filter, Inbox, ChevronDown, ChevronUp, Dumbbell, Trash2, Repeat } from 'lucide-react';
 
 interface HistoryProps {
     logs: WorkoutRecord[];
     onDeleteRecord?: (id: string) => void;
+    onRepeatWorkout?: (record: WorkoutRecord) => void; // New Prop
 }
 
-const History: React.FC<HistoryProps> = ({ logs, onDeleteRecord }) => {
+const History: React.FC<HistoryProps> = ({ logs, onDeleteRecord, onRepeatWorkout }) => {
   const [filterDate, setFilterDate] = useState<string>('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -25,6 +26,13 @@ const History: React.FC<HistoryProps> = ({ logs, onDeleteRecord }) => {
   const handleDeleteClick = (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
       setDeleteId(id);
+  };
+
+  const handleRepeatClick = (e: React.MouseEvent, record: WorkoutRecord) => {
+      e.stopPropagation();
+      if (onRepeatWorkout) {
+          onRepeatWorkout(record);
+      }
   };
 
   const confirmDelete = () => {
@@ -122,22 +130,31 @@ const History: React.FC<HistoryProps> = ({ logs, onDeleteRecord }) => {
                             <p className="text-sm text-gray-500 text-center py-2">無詳細訓練數據</p>
                         )}
                         
-                        {onDeleteRecord && (
-                            <div className="mt-6 flex justify-end">
+                        <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-charcoal-700">
+                            {onDeleteRecord && (
                                 <button 
                                     onClick={(e) => handleDeleteClick(e, record.id)}
-                                    className="flex items-center gap-1 text-xs text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-2 rounded-lg transition-colors border border-red-200 dark:border-red-900/30 cursor-pointer"
+                                    className="flex items-center gap-1 text-xs text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-2 rounded-lg transition-colors cursor-pointer"
                                 >
-                                    <Trash2 size={14} /> 刪除此記錄
+                                    <Trash2 size={14} /> 刪除
                                 </button>
-                            </div>
-                        )}
+                            )}
+                            
+                            {onRepeatWorkout && (
+                                <button 
+                                    onClick={(e) => handleRepeatClick(e, record)}
+                                    className="flex items-center gap-1 text-xs font-bold text-white bg-cta-orange hover:bg-cta-hover px-4 py-2 rounded-lg transition-colors shadow-md shadow-orange-500/20 active:scale-95"
+                                >
+                                    <Repeat size={14} /> 再次進行此訓練
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
             ))
         ) : (
-            <div className="text-center py-16 text-gray-500 bg-gray-50 dark:bg-charcoal-800/50 rounded-xl border-dashed border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center">
+            <div className="text-center py-16 text-gray-500 bg-gray-50 dark:bg-charcoal-800/50 rounded-xl border-dashed border border-gray-200 dark:border-charcoal-700 flex flex-col items-center justify-center">
                 <Inbox size={48} className="mb-4 opacity-20" />
                 <p>找不到符合的記錄</p>
                 {filterDate ? (

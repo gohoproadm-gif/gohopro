@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DEFAULT_PLANS, HK_HOLIDAYS } from '../constants';
 import { DailyPlan, ScheduledWorkout, WorkoutRecord, ExerciseSetLog, CalendarEvent, NutritionLog, UserProfile, Exercise, Language } from '../types';
-import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings, Minus, RefreshCw, RotateCcw, PenTool, Flame, Pencil, Save, Trophy, Share2, ClipboardPaste } from 'lucide-react';
+import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings, Minus, RefreshCw, RotateCcw, PenTool, Flame, Pencil, Save, Trophy, Share2, ClipboardPaste, BrainCircuit, Box, Bell } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { apiGetSchedule, apiSaveSchedule, apiGetEvents, apiSaveEvent, apiDeleteEvent } from '../lib/db';
 
@@ -18,6 +18,7 @@ interface WorkoutProps {
   nutritionLogs: NutritionLog[];
   onDeleteNutrition: (id: string) => Promise<void>;
   language: Language;
+  externalPlanToStart?: DailyPlan | null; // New Prop
 }
 
 // Singleton AudioContext to prevent browser limits
@@ -61,15 +62,23 @@ const playBeep = (count: number = 1) => {
         console.error("Audio error", e);
     }
     
+    // Enhanced Vibration Pattern: Long, Pause, Long (more noticeable in pocket)
     if (navigator.vibrate) {
-        navigator.vibrate(Array(count).fill(100));
+        navigator.vibrate([500, 200, 500, 200, 500]);
     }
 };
 
-// Utility to clean JSON string from Markdown blocks
+// Utility to clean JSON string from Markdown blocks AND DeepSeek <think> tags
 const cleanJson = (text: string) => {
     if (!text) return "{}";
-    let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    // 1. Remove DeepSeek R1 <think> tags content
+    let clean = text.replace(/<think>[\s\S]*?<\/think>/g, '');
+    
+    // 2. Remove Markdown code blocks
+    clean = clean.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    // 3. Extract JSON object
     const firstBrace = clean.indexOf('{');
     const lastBrace = clean.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1) {
@@ -77,6 +86,16 @@ const cleanJson = (text: string) => {
     }
     return clean;
 };
+
+const LOADING_TIPS = [
+    "正在分析肌群結構...",
+    "正在計算最佳組數與次數...",
+    "DeepSeek 正在思考最佳訓練路徑...",
+    "AI 正在評估您的恢復能力...",
+    "正在為您客製化熱身流程...",
+    "肌肉是在休息時生長的，記得睡飽喔！",
+    "正在搜尋最有效的訓練動作..."
+];
 
 const Workout: React.FC<WorkoutProps> = ({ 
     autoStart, 
@@ -87,7 +106,8 @@ const Workout: React.FC<WorkoutProps> = ({
     onGoToSettings,
     nutritionLogs,
     onDeleteNutrition,
-    language
+    language,
+    externalPlanToStart
 }) => {
   const [mode, setMode] = useState<Mode>('TIMETABLE');
   const [schedule, setSchedule] = useState<ScheduledWorkout[]>([]);
@@ -130,6 +150,9 @@ const Workout: React.FC<WorkoutProps> = ({
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [currentProvider, setCurrentProvider] = useState<string>('');
+  const [loadingTip, setLoadingTip] = useState('');
+  const [selectedEquipment, setSelectedEquipment] = useState<'GYM' | 'DUMBBELL' | 'BODYWEIGHT'>('GYM');
 
   // Import Text State
   const [importText, setImportText] = useState('');
@@ -180,6 +203,9 @@ const Workout: React.FC<WorkoutProps> = ({
         addActivity: '新增至時間表',
         workout: '安排訓練',
         activity: '一般活動',
+        restFinished: '休息結束！',
+        goNextSet: '是時候開始下一組了 💪',
+        enableNotify: '開啟通知',
     },
     en: {
         timetable: 'Timetable',
@@ -214,10 +240,13 @@ const Workout: React.FC<WorkoutProps> = ({
         addActivity: 'Add to Schedule',
         workout: 'Workout',
         activity: 'Activity',
+        restFinished: 'Rest Finished!',
+        goNextSet: 'Time for the next set 💪',
+        enableNotify: 'Enable Alerts',
     }
   }[language];
 
-  // Initial Data Load
+  // Initial Data Load & Permission Request
   useEffect(() => {
     const loadData = async () => {
         const s = await apiGetSchedule();
@@ -226,7 +255,24 @@ const Workout: React.FC<WorkoutProps> = ({
         setEvents(e);
     };
     loadData();
+
+    // Request Notification Permission on mount
+    if ("Notification" in window && Notification.permission !== "granted") {
+        Notification.requestPermission();
+    }
   }, []);
+
+  // Cycle loading tips
+  useEffect(() => {
+      let interval: any;
+      if (isGenerating) {
+          setLoadingTip(LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)]);
+          interval = setInterval(() => {
+              setLoadingTip(LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)]);
+          }, 2500);
+      }
+      return () => clearInterval(interval);
+  }, [isGenerating]);
 
   // SESSION PERSISTENCE: Restore session on mount
   useEffect(() => {
@@ -279,12 +325,18 @@ const Workout: React.FC<WorkoutProps> = ({
 
   useEffect(() => {
       if (autoStart && onAutoStartConsumed) {
-          const todayPlanId = schedule.find(s => s.date === selectedDate)?.planId;
-          const planToStart = allPlans.find(p => p.id === todayPlanId) || allPlans[0];
-          handleStartSession(planToStart);
+          if (externalPlanToStart) {
+              // Priority: Start the specific plan passed (e.g. from History repeat)
+              handleStartSession(externalPlanToStart);
+          } else {
+              // Default: Check today's schedule
+              const todayPlanId = schedule.find(s => s.date === selectedDate)?.planId;
+              const planToStart = allPlans.find(p => p.id === todayPlanId) || allPlans[0];
+              handleStartSession(planToStart);
+          }
           onAutoStartConsumed();
       }
-  }, [autoStart, allPlans]);
+  }, [autoStart, externalPlanToStart]);
 
   useEffect(() => {
       let interval: any;
@@ -292,7 +344,22 @@ const Workout: React.FC<WorkoutProps> = ({
           interval = setInterval(() => {
               setRestTimer(prev => {
                   if (prev <= 1) {
+                      // Timer Finished
                       playBeep(3);
+                      
+                      // Trigger System Notification
+                      if ("Notification" in window && Notification.permission === "granted") {
+                          try {
+                              new Notification(t.restFinished, {
+                                  body: t.goNextSet,
+                                  icon: '/icon.png', // Fallback icon path
+                                  vibrate: [200, 100, 200]
+                              } as any);
+                          } catch (e) {
+                              console.warn("Notification failed", e);
+                          }
+                      }
+
                       setIsResting(false);
                       return 0;
                   }
@@ -301,11 +368,17 @@ const Workout: React.FC<WorkoutProps> = ({
           }, 1000);
       }
       return () => clearInterval(interval);
-  }, [isResting, restTimer]);
+  }, [isResting, restTimer, language]);
 
   const updateAndSavePlans = (newPlans: DailyPlan[]) => {
       setAllPlans(newPlans);
       localStorage.setItem('fitlife_plans', JSON.stringify(newPlans));
+  };
+
+  const requestNotificationPermission = () => {
+      if ("Notification" in window) {
+          Notification.requestPermission();
+      }
   };
 
   // --- Smart Pre-fill Logic ---
@@ -331,9 +404,17 @@ const Workout: React.FC<WorkoutProps> = ({
       const initialLogs: Record<string, ExerciseSetLog[]> = {};
       
       plan.exercises.forEach(ex => {
-          const lastStats = findLastSessionStats(ex.name);
-          const defaultWeight = lastStats ? lastStats.weight : (ex.weight || 0);
-          const defaultReps = lastStats ? lastStats.reps : (parseInt(ex.reps) || 10);
+          // If exercise has explicit weight (e.g. from repeat), use it. otherwise check history.
+          let defaultWeight = ex.weight || 0;
+          let defaultReps = parseInt(ex.reps) || 10;
+
+          if (defaultWeight === 0) {
+              const lastStats = findLastSessionStats(ex.name);
+              if (lastStats) {
+                  defaultWeight = lastStats.weight;
+                  defaultReps = lastStats.reps;
+              }
+          }
 
           initialLogs[ex.id] = Array(ex.sets).fill(null).map((_, i) => ({
               setNumber: i + 1,
@@ -467,8 +548,7 @@ const Workout: React.FC<WorkoutProps> = ({
       setDeleteConfirmation({ isOpen: false, type: 'PLAN', id: null, title: '' });
   };
 
-  // ... (Keep existing helpers like getApiKey, getDeepSeekConfig, callOpenAI, callGemini, handleGeneratePlan)
-  
+  // ... (API Configuration Helpers) ...
   const getApiKey = () => {
     // 1. Check System Key (Admin set)
     const systemKey = localStorage.getItem('GO_SYSTEM_GOOGLE_API_KEY');
@@ -532,20 +612,27 @@ const Workout: React.FC<WorkoutProps> = ({
 
         if (!apiKey) throw new Error("API Key 缺失。請至設定頁面配置 API Key。");
 
+        const body: any = {
+            model: model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: prompt }
+            ]
+        };
+
+        // DeepSeek R1 (reasoner) does NOT support response_format: json_object. 
+        // Only add it if model is NOT reasoner.
+        if (!model.includes('reasoner')) {
+            body.response_format = { type: 'json_object' };
+        }
+
         const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`
             },
-            body: JSON.stringify({
-                model: model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: prompt }
-                ],
-                response_format: { type: 'json_object' }
-            })
+            body: JSON.stringify(body)
         });
 
         if (!response.ok) {
@@ -570,40 +657,72 @@ const Workout: React.FC<WorkoutProps> = ({
       return JSON.parse(cleanJson(response.text || "{}"));
   };
 
+  // --- MAIN AI GENERATOR LOGIC ---
   const handleGeneratePlan = async () => {
       if (!aiPrompt.trim()) return;
       setAiError(null);
       setIsGenerating(true);
+      
+      const targetLang = language === 'zh' ? 'Traditional Chinese (繁體中文)' : 'English';
+      
+      // Contextual Equipment Info
+      let equipContext = "";
+      if (selectedEquipment === 'GYM') equipContext = "Equipment available: Full commercial gym (machines, barbells, cables, dumbbells).";
+      if (selectedEquipment === 'DUMBBELL') equipContext = "Equipment available: Dumbbells only and a bench. No machines.";
+      if (selectedEquipment === 'BODYWEIGHT') equipContext = "Equipment available: Bodyweight only (Calisthenics), maybe a pull-up bar.";
+
+      const systemPrompt = `Create a workout plan.
+      **Context**: ${equipContext}
+      **Goal**: Based on user request. If user asks for DeepSeek logic, use <think> tags to explain the reasoning briefly before the JSON.
+      **Output Language**: Strictly output all text (titles, exercise names, focus) in ${targetLang}.
+      **Format**: Return strictly valid JSON (outside of <think> tags) with structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`;
+      
+      const userPromptMsg = aiPrompt;
+      const { apiKey } = getDeepSeekConfig();
+
+      // Fixed Logic: Default to Google unless explicitly OpenAI/DeepSeek
+      let shouldUseOpenAI = false;
+      if (userProfile.aiProvider === 'openai') {
+          shouldUseOpenAI = true;
+      } else if (userProfile.aiProvider === 'google') {
+          shouldUseOpenAI = false;
+      } else {
+          // Default to Google if available, else try OpenAI
+          const googleKey = getApiKey();
+          if (googleKey) shouldUseOpenAI = false;
+          else shouldUseOpenAI = !!apiKey;
+      }
+
+      setCurrentProvider(shouldUseOpenAI ? 'DeepSeek/OpenAI' : 'Google Gemini');
+
       try {
           let result;
-          const { apiKey } = getDeepSeekConfig();
-          const targetLang = language === 'zh' ? 'Traditional Chinese (繁體中文)' : 'English';
-          const systemPrompt = `Create a workout plan based on the request. 
-          **Output Language**: Strictly output all text (titles, exercise names, focus) in ${targetLang}.
-          Return strictly valid JSON with structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`;
-          
-          const userPromptMsg = aiPrompt;
-
-          // Fixed Logic: Respect User Preference
-          let shouldUseOpenAI = false;
-          if (userProfile.aiProvider === 'openai') {
-              shouldUseOpenAI = true;
-          } else if (userProfile.aiProvider === 'google') {
-              shouldUseOpenAI = false;
-          } else {
-              // Auto: Use OpenAI if available, else Google
-              shouldUseOpenAI = !!apiKey;
-          }
-
           if (shouldUseOpenAI && apiKey) {
-               result = await callOpenAI(userPromptMsg, systemPrompt);
+               try {
+                   result = await callOpenAI(userPromptMsg, systemPrompt);
+               } catch (openAiError: any) {
+                   console.warn("DeepSeek failed, attempting fallback to Gemini...", openAiError);
+                   const msg = openAiError.message || "";
+                   // Fallback logic
+                   if (msg.includes("Insufficient Balance") || msg.includes("Quota")) {
+                       setAiError("DeepSeek 餘額不足，已自動切換至 Google Gemini...");
+                       setCurrentProvider('Gemini (Fallback)');
+                       // Fallback to Gemini
+                       result = await callGemini(`Create a workout plan based on this request: "${userPromptMsg}". Context: ${equipContext}.
+                        **Output Language**: Strictly output all text (titles, exercise names, focus) in ${targetLang}.
+                        Return strictly JSON. Structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`);
+                   } else {
+                       throw openAiError; // Re-throw if it's another error
+                   }
+               }
           } else {
-               result = await callGemini(`Create a workout plan based on this request: "${userPromptMsg}". 
+               // Google Gemini Call
+               result = await callGemini(`Create a workout plan based on this request: "${userPromptMsg}". Context: ${equipContext}.
                **Output Language**: Strictly output all text (titles, exercise names, focus) in ${targetLang}.
                Return strictly JSON. Structure: { "title": "Plan Name", "focus": "Target Area", "duration": 45, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "12", "section": "warmup" | "main" | "core" } ] }`);
           }
           
-          if (result.title) {
+          if (result && result.title) {
               const newPlan: DailyPlan = {
                   id: 'ai_' + Date.now(),
                   title: result.title,
@@ -630,7 +749,7 @@ const Workout: React.FC<WorkoutProps> = ({
       } catch (e: any) {
           let msg = e.message || "未知錯誤";
           if (msg.includes("Insufficient Balance")) {
-              setAiError("生成失敗: DeepSeek/OpenAI 餘額不足。請切換至 Google Gemini 或儲值。");
+              setAiError("生成失敗: DeepSeek 帳戶餘額為 0 (需充值)。請切換至 Google Gemini 免費版。");
           } else if (msg.includes("API Key")) {
                setAiError("生成失敗: API Key 缺失 (請檢查設定)");
           } else {
@@ -641,57 +760,78 @@ const Workout: React.FC<WorkoutProps> = ({
       }
   };
 
+  // ... (Other functions remains unchanged) ...
   // --- Import Text Plan ---
   const handleImportTextPlan = async () => {
       if (!importText.trim()) return;
       setAiError(null);
       setIsGenerating(true);
+      
+      const targetLang = language === 'zh' ? 'Traditional Chinese (繁體中文)' : 'English';
+      const systemPrompt = `Analyze the unstructured workout text provided by the user. 
+      Goal: Convert it into a structured JSON workout plan.
+      
+      Rules for Analysis:
+      1. Extract a suitable Title (e.g., "Imported Chest Day").
+      2. Identify Target Focus (e.g., "Chest/Back").
+      3. Extract Exercises with Sets and Reps. If "reps" is a range (e.g., "8-12"), keep it as a string.
+      4. **CRITICAL**: Classify each exercise into one of three sections:
+         - "warmup": Exercises explicitly labeled as warmup, mobility, activation, or dynamic stretching.
+         - "core": Exercises labeled as core, abs, plank, OR **Cooldown/Stretching** exercises at the end of the list.
+         - "main": All other resistance training exercises.
+      5. **Output Language**: Strictly output all text (titles, exercise names, focus) in ${targetLang}. Translate if necessary.
+      
+      JSON Structure:
+      { 
+        "title": "String", 
+        "focus": "String", 
+        "duration": 60, 
+        "exercises": [ 
+          { "name": "String", "sets": Number, "reps": "String", "section": "warmup" | "main" | "core" } 
+        ] 
+      }`;
+
+      const prompt = `Convert this text to workout JSON: \n\n${importText}`;
+      const { apiKey } = getDeepSeekConfig();
+
+      // Fixed Logic: Default to Google unless explicitly OpenAI/DeepSeek
+      let shouldUseOpenAI = false;
+      if (userProfile.aiProvider === 'openai') {
+          shouldUseOpenAI = true;
+      } else if (userProfile.aiProvider === 'google') {
+          shouldUseOpenAI = false;
+      } else {
+          // Default to Google if available
+          const googleKey = getApiKey();
+          if (googleKey) shouldUseOpenAI = false;
+          else shouldUseOpenAI = !!apiKey;
+      }
+
+      setCurrentProvider(shouldUseOpenAI ? 'DeepSeek/OpenAI' : 'Google Gemini');
+
       try {
-          const targetLang = language === 'zh' ? 'Traditional Chinese (繁體中文)' : 'English';
-          const systemPrompt = `Analyze the unstructured workout text provided by the user. 
-          Goal: Convert it into a structured JSON workout plan.
-          
-          Rules for Analysis:
-          1. Extract a suitable Title (e.g., "Imported Chest Day").
-          2. Identify Target Focus (e.g., "Chest/Back").
-          3. Extract Exercises with Sets and Reps. If "reps" is a range (e.g., "8-12"), keep it as a string.
-          4. **CRITICAL**: Classify each exercise into one of three sections:
-             - "warmup": Exercises explicitly labeled as warmup, mobility, activation, or dynamic stretching.
-             - "core": Exercises labeled as core, abs, plank, OR **Cooldown/Stretching** exercises at the end of the list.
-             - "main": All other resistance training exercises.
-          5. **Output Language**: Strictly output all text (titles, exercise names, focus) in ${targetLang}. Translate if necessary.
-          
-          JSON Structure:
-          { 
-            "title": "String", 
-            "focus": "String", 
-            "duration": 60, 
-            "exercises": [ 
-              { "name": "String", "sets": Number, "reps": "String", "section": "warmup" | "main" | "core" } 
-            ] 
-          }`;
-
-          const prompt = `Convert this text to workout JSON: \n\n${importText}`;
           let result;
-          const { apiKey } = getDeepSeekConfig();
-
-          // Fixed Logic: Respect User Preference
-          let shouldUseOpenAI = false;
-          if (userProfile.aiProvider === 'openai') {
-              shouldUseOpenAI = true;
-          } else if (userProfile.aiProvider === 'google') {
-              shouldUseOpenAI = false;
-          } else {
-              shouldUseOpenAI = !!apiKey;
-          }
-
           if (shouldUseOpenAI && apiKey) {
-              result = await callOpenAI(prompt, systemPrompt);
+              try {
+                  result = await callOpenAI(prompt, systemPrompt);
+              } catch (openAiError: any) {
+                   console.warn("DeepSeek failed, attempting fallback to Gemini...", openAiError);
+                   const msg = openAiError.message || "";
+                   // Fallback logic
+                   if (msg.includes("Insufficient Balance") || msg.includes("Quota")) {
+                       setAiError("DeepSeek 餘額不足，已自動切換至 Google Gemini...");
+                       setCurrentProvider('Gemini (Fallback)');
+                       // Fallback to Gemini
+                       result = await callGemini(systemPrompt + "\n\n" + prompt);
+                   } else {
+                       throw openAiError; // Re-throw if it's another error
+                   }
+              }
           } else {
               result = await callGemini(systemPrompt + "\n\n" + prompt);
           }
 
-          if (result.title) {
+          if (result && result.title) {
                const newPlan: DailyPlan = {
                   id: 'imp_' + Date.now(),
                   title: result.title,
@@ -716,7 +856,7 @@ const Workout: React.FC<WorkoutProps> = ({
           console.error("Import failed", e);
           let msg = e.message || "無法解析文字";
           if (msg.includes("Insufficient Balance")) {
-              setAiError("匯入失敗: DeepSeek/OpenAI 餘額不足。請前往「設定」切換至 Google Gemini。");
+              setAiError("匯入失敗: DeepSeek 帳戶餘額為 0 (需充值)。請切換至 Google Gemini 免費版。");
           } else {
               setAiError("匯入失敗: " + msg);
           }
@@ -832,6 +972,15 @@ const Workout: React.FC<WorkoutProps> = ({
           if (isComplete) {
               setRestTimer(60); 
               setIsResting(true);
+              
+              // Ensure audio context is ready on user gesture
+              if (!audioCtx) {
+                  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                  if (AudioContextClass) audioCtx = new AudioContextClass();
+              }
+              if (audioCtx && audioCtx.state === 'suspended') {
+                  audioCtx.resume();
+              }
           }
           return { ...prev, [exerciseId]: logs };
       });
@@ -846,6 +995,7 @@ const Workout: React.FC<WorkoutProps> = ({
       return null;
   };
 
+  // ... (Keep Timeline and Calendar Rendering) ...
   // --- Calendar Logic ---
   const getDaysInMonth = (date: Date) => {
       const year = date.getFullYear();
@@ -1059,7 +1209,13 @@ const Workout: React.FC<WorkoutProps> = ({
                           <div className="text-xs text-gray-400 font-bold uppercase">Resting</div>
                           <div className="text-2xl font-mono font-bold text-cta-orange">{restTimer}s</div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
+                          {/* Notification Hint */}
+                          {("Notification" in window && Notification.permission !== "granted") && (
+                              <button onClick={requestNotificationPermission} className="p-2 bg-gray-800 rounded-lg hover:bg-gray-700 text-yellow-400" title={t.enableNotify}>
+                                  <Bell size={16} />
+                              </button>
+                          )}
                           <button onClick={() => setRestTimer(t => Math.max(0, t - 10))} className="p-2 bg-gray-800 rounded-lg hover:bg-gray-700 flex items-center justify-center w-10">
                               <Minus size={16} />
                           </button>
@@ -1252,128 +1408,72 @@ const Workout: React.FC<WorkoutProps> = ({
             </div>
         )}
 
-        {/* ... (Keep existing code for PLANS, CREATE, MANUAL_CREATE, Add Event Modal, and Delete Confirmation Modal) */}
-        
-        {mode === 'PLANS' && (
-            <div className="space-y-4 animate-fade-in">
-                 {allPlans.map(plan => (
-                     <div key={plan.id} className="bg-white dark:bg-charcoal-800 p-4 rounded-xl border border-gray-200 dark:border-charcoal-700 flex justify-between items-center group relative">
-                         <div>
-                             <h4 className="font-bold">{plan.title}</h4>
-                             <p className="text-xs text-gray-500">{plan.focus}</p>
-                         </div>
-                         <div className="flex items-center gap-2 z-20">
-                             <button 
-                                onClick={(e) => handleEditPlan(e, plan)}
-                                className="p-2 text-gray-400 hover:text-neon-blue rounded-lg transition-colors cursor-pointer"
-                                title="編輯"
-                                type="button"
-                             >
-                                 <Pencil size={18} />
-                             </button>
-                             <button 
-                                onClick={(e) => initiateDelete(e, 'PLAN', plan.id, plan.title)}
-                                className="p-2 text-gray-400 hover:text-red-500 rounded-lg transition-colors cursor-pointer"
-                                title="刪除"
-                                type="button"
-                             >
-                                 <Trash2 size={18} />
-                             </button>
-                             <button 
-                                onClick={async (e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    const newSchedule = [...schedule, { date: selectedDate, planId: plan.id, completed: false }];
-                                    setSchedule(newSchedule);
-                                    await apiSaveSchedule(newSchedule);
-                                    setMode('TIMETABLE');
-                                }}
-                                className="bg-gray-100 dark:bg-charcoal-700 p-2 rounded-lg hover:bg-neon-green hover:text-charcoal-900 transition-colors ml-2 cursor-pointer"
-                                title="加入行程"
-                                type="button"
-                             >
-                                 <Plus size={20} />
-                             </button>
-                         </div>
-                     </div>
-                 ))}
-                 
-                 <div className="grid grid-cols-2 gap-4">
-                     <button 
-                        onClick={() => {
-                            setEditingPlanId(null);
-                            setManualPlanTitle('');
-                            setManualExercises([]);
-                            setMode('MANUAL_CREATE');
-                        }}
-                        className="w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-charcoal-600 text-gray-500 font-bold flex flex-col items-center justify-center gap-2 hover:border-neon-blue hover:text-neon-blue transition-colors"
-                        type="button"
-                     >
-                         <PenTool size={20} /> {t.manual}
-                     </button>
-                     <button 
-                        onClick={() => setMode('CREATE')}
-                        className="w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-charcoal-600 text-gray-500 font-bold flex flex-col items-center justify-center gap-2 hover:border-cta-orange hover:text-cta-orange transition-colors"
-                        type="button"
-                     >
-                         <Sparkles size={20} /> {t.ai}
-                     </button>
-                     <button 
-                        onClick={() => setMode('IMPORT_TEXT')}
-                        className="col-span-2 w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-charcoal-600 text-gray-500 font-bold flex items-center justify-center gap-2 hover:border-neon-purple hover:text-neon-purple transition-colors"
-                        type="button"
-                     >
-                         <ClipboardPaste size={20} /> {t.import}
-                     </button>
-                 </div>
-            </div>
-        )}
-
-        {/* Text Import Mode */}
-        {mode === 'IMPORT_TEXT' && (
+        {/* AI Creator */}
+        {mode === 'CREATE' && (
             <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-lg flex items-center gap-2"><ClipboardPaste className="text-neon-purple" /> {t.import}</h3>
-                    <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
+                    <h3 className="font-bold text-lg flex items-center gap-2"><Sparkles className="text-cta-orange" /> {t.ai}</h3>
+                    <div className="flex items-center gap-2">
+                        {currentProvider && <span className="text-[10px] bg-gray-100 dark:bg-charcoal-900 px-2 py-1 rounded text-gray-500 font-bold">Using: {currentProvider}</span>}
+                        <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
+                    </div>
                 </div>
                 <div className="space-y-4">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {language === 'zh' 
-                            ? "直接貼上您的訓練計畫（例如從教練的訊息或網路文章）。AI 會自動分析動作、組數與次數，並將熱身與收操動作分類。"
-                            : "Paste your workout plan here (e.g., from messages or articles). AI will analyze exercises, sets, and reps, and categorize warmup/cooldown sections."}
-                    </p>
+                    <div className="text-xs text-gray-500 bg-gray-100 dark:bg-charcoal-900 p-2 rounded flex items-center gap-2">
+                        <span className="shrink-0">Model:</span>
+                        <span className={`font-bold px-2 py-0.5 rounded ${userProfile.aiProvider === 'openai' ? 'bg-neon-purple/10 text-neon-purple' : 'bg-neon-blue/10 text-neon-blue'}`}>
+                            {userProfile.aiProvider === 'openai' ? 'OpenAI / DeepSeek' : 'Google Gemini'}
+                        </span>
+                        {userProfile.aiProvider === 'openai' && !userProfile.openaiApiKey && !getDeepSeekConfig().apiKey && (
+                            <span className="text-red-500 text-[10px] ml-auto flex items-center gap-1"><AlertTriangle size={10}/> No API Key</span>
+                        )}
+                        {userProfile.aiProvider === 'openai' && userProfile.openaiModel && userProfile.openaiModel.includes('reasoner') && (
+                            <span className="text-xs font-bold text-neon-green flex items-center gap-1"><BrainCircuit size={10}/> R1 Ready</span>
+                        )}
+                    </div>
+
+                    <div className="bg-gray-50 dark:bg-charcoal-900/50 p-2 rounded-xl border border-gray-200 dark:border-charcoal-700">
+                        <label className="text-xs font-bold text-gray-500 mb-2 block ml-1">選擇可用器材 (Equipment)</label>
+                        <div className="flex gap-2">
+                            <button onClick={() => setSelectedEquipment('GYM')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all border ${selectedEquipment === 'GYM' ? 'bg-white dark:bg-charcoal-800 text-neon-blue border-neon-blue' : 'text-gray-500 border-transparent hover:bg-gray-200 dark:hover:bg-charcoal-800'}`}>
+                                健身房 (Full Gym)
+                            </button>
+                            <button onClick={() => setSelectedEquipment('DUMBBELL')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all border ${selectedEquipment === 'DUMBBELL' ? 'bg-white dark:bg-charcoal-800 text-cta-orange border-cta-orange' : 'text-gray-500 border-transparent hover:bg-gray-200 dark:hover:bg-charcoal-800'}`}>
+                                居家啞鈴
+                            </button>
+                            <button onClick={() => setSelectedEquipment('BODYWEIGHT')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all border ${selectedEquipment === 'BODYWEIGHT' ? 'bg-white dark:bg-charcoal-800 text-neon-green border-neon-green' : 'text-gray-500 border-transparent hover:bg-gray-200 dark:hover:bg-charcoal-800'}`}>
+                                徒手訓練
+                            </button>
+                        </div>
+                    </div>
+
                     <textarea 
-                        value={importText} 
-                        onChange={(e) => { setImportText(e.target.value); setAiError(null); }} 
-                        placeholder={language === 'zh' ? `例如：\n熱身：肩袖內外旋 2組15下\n槓鈴划船 4組12下\n...\n結束：上斜方拉伸 30秒` : `e.g.:\nWarmup: Rotator cuff 2x15\nBarbell Row 4x12\n...\nEnd: Upper trap stretch 30s`} 
-                        className="w-full h-48 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-purple resize-none font-mono text-sm" 
+                        value={aiPrompt} 
+                        onChange={(e) => { setAiPrompt(e.target.value); setAiError(null); }} 
+                        placeholder={language === 'zh' ? "例如：我只有30分鐘，想練胸肌和三頭肌..." : "e.g., I have 30 mins, want to train chest and triceps..."} 
+                        className="w-full h-32 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange resize-none" 
                     />
-                    
                     {aiError && (
                         <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 text-xs rounded-lg flex flex-col items-start gap-2 w-full">
                             <div className="flex items-center gap-2">
                                 <AlertTriangle size={14} className="shrink-0" />
                                 <span>{aiError}</span>
                             </div>
-                            {aiError.includes("餘額不足") && (
-                                <button onClick={onGoToSettings} className="underline font-bold text-red-600 dark:text-red-400 ml-6">前往設定切換 AI</button>
+                            {aiError.includes("設定") && (
+                                <button onClick={onGoToSettings} className="underline font-bold text-red-600 dark:text-red-400">Settings</button>
                             )}
                         </div>
                     )}
-
-                    <button 
-                        onClick={handleImportTextPlan} 
-                        disabled={isGenerating || !importText.trim()} 
-                        className="w-full bg-neon-purple text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-purple-600 transition-colors"
-                    >
+                    <button onClick={handleGeneratePlan} disabled={isGenerating || !aiPrompt.trim()} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">
                         {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}
-                        {isGenerating ? t.generating : t.analyzing}
+                        {isGenerating ? (loadingTip || t.generating) : t.createPlan}
                     </button>
                 </div>
             </div>
         )}
 
-        {/* Unified Delete Confirmation Modal */}
+        {/* ... (Other Modals) ... */}
+        {/* ... (Delete Confirmation Modal) ... */}
         {deleteConfirmation.isOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                 <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
@@ -1404,7 +1504,7 @@ const Workout: React.FC<WorkoutProps> = ({
             </div>
         )}
 
-        {/* Manual Plan Creator */}
+        {/* ... (Manual Plan Creator) ... */}
         {mode === 'MANUAL_CREATE' && (
             <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in space-y-6">
                 <div className="flex justify-between items-center mb-2">
@@ -1458,46 +1558,53 @@ const Workout: React.FC<WorkoutProps> = ({
             </div>
         )}
 
-        {/* AI Creator */}
-        {mode === 'CREATE' && (
+        {/* ... (Keep existing Text Import Mode, Add Event Modal, etc.) ... */}
+        {mode === 'IMPORT_TEXT' && (
             <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-lg flex items-center gap-2"><Sparkles className="text-cta-orange" /> {t.ai}</h3>
-                    <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
+                    <h3 className="font-bold text-lg flex items-center gap-2"><ClipboardPaste className="text-neon-purple" /> {t.import}</h3>
+                    <div className="flex items-center gap-2">
+                        {currentProvider && <span className="text-[10px] bg-gray-100 dark:bg-charcoal-900 px-2 py-1 rounded text-gray-500 font-bold">Using: {currentProvider}</span>}
+                        <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
+                    </div>
                 </div>
                 <div className="space-y-4">
-                    <div className="text-xs text-gray-500 bg-gray-100 dark:bg-charcoal-900 p-2 rounded flex items-center gap-2">
-                        <span className="shrink-0">Model:</span>
-                        <span className={`font-bold px-2 py-0.5 rounded ${userProfile.aiProvider === 'openai' ? 'bg-neon-purple/10 text-neon-purple' : 'bg-neon-blue/10 text-neon-blue'}`}>
-                            {userProfile.aiProvider === 'openai' ? 'OpenAI / DeepSeek' : 'Google Gemini'}
-                        </span>
-                        {userProfile.aiProvider === 'openai' && !userProfile.openaiApiKey && !getDeepSeekConfig().apiKey && (
-                            <span className="text-red-500 text-[10px] ml-auto flex items-center gap-1"><AlertTriangle size={10}/> No API Key</span>
-                        )}
-                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {language === 'zh' 
+                            ? "直接貼上您的訓練計畫（例如從教練的訊息或網路文章）。AI 會自動分析動作、組數與次數，並將熱身與收操動作分類。"
+                            : "Paste your workout plan here (e.g., from messages or articles). AI will analyze exercises, sets, and reps, and categorize warmup/cooldown sections."}
+                    </p>
                     <textarea 
-                        value={aiPrompt} 
-                        onChange={(e) => { setAiPrompt(e.target.value); setAiError(null); }} 
-                        placeholder={language === 'zh' ? "例如：我只有30分鐘，想練胸肌和三頭肌..." : "e.g., I have 30 mins, want to train chest and triceps..."} 
-                        className="w-full h-32 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange resize-none" 
+                        value={importText} 
+                        onChange={(e) => { setImportText(e.target.value); setAiError(null); }} 
+                        placeholder={language === 'zh' ? `例如：\n熱身：肩袖內外旋 2組15下\n槓鈴划船 4組12下\n...\n結束：上斜方拉伸 30秒` : `e.g.:\nWarmup: Rotator cuff 2x15\nBarbell Row 4x12\n...\nEnd: Upper trap stretch 30s`} 
+                        className="w-full h-48 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-purple resize-none font-mono text-sm" 
                     />
+                    
                     {aiError && (
                         <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 text-xs rounded-lg flex flex-col items-start gap-2 w-full">
                             <div className="flex items-center gap-2">
                                 <AlertTriangle size={14} className="shrink-0" />
                                 <span>{aiError}</span>
                             </div>
-                            {aiError.includes("設定") && (
-                                <button onClick={onGoToSettings} className="underline font-bold text-red-600 dark:text-red-400">Settings</button>
+                            {aiError.includes("餘額") && (
+                                <button onClick={onGoToSettings} className="underline font-bold text-red-600 dark:text-red-400 ml-6">前往設定切換 AI</button>
                             )}
                         </div>
                     )}
-                    <button onClick={handleGeneratePlan} disabled={isGenerating || !aiPrompt.trim()} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">{isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}{isGenerating ? t.generating : t.createPlan}</button>
+
+                    <button 
+                        onClick={handleImportTextPlan} 
+                        disabled={isGenerating || !importText.trim()} 
+                        className="w-full bg-neon-purple text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-purple-600 transition-colors"
+                    >
+                        {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}
+                        {isGenerating ? (loadingTip || t.generating) : t.analyzing}
+                    </button>
                 </div>
             </div>
         )}
 
-        {/* Add Event Modal */}
         {showAddEventModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                 <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6 animate-fade-in">
