@@ -28,6 +28,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
         startWorkout: '開始訓練',
         arrangeWorkout: '安排訓練',
         editSteps: '編輯步數',
+        editWater: '編輯飲水',
         save: '儲存',
         progress: '達成',
         macros: '營養素'
@@ -44,6 +45,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
         startWorkout: 'Start Workout',
         arrangeWorkout: 'Plan Workout',
         editSteps: 'Edit Steps',
+        editWater: 'Edit Water',
         save: 'Save',
         progress: 'Progress',
         macros: 'Macros'
@@ -59,6 +61,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
 
   // Water Tracker State (Local Persistence)
   const [waterIntake, setWaterIntake] = useState(0);
+  const [showWaterModal, setShowWaterModal] = useState(false);
+  const [tempWater, setTempWater] = useState(0);
   const dailyWaterGoal = 2500; // ml
 
   // Steps Tracker State
@@ -83,6 +87,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
       const newVal = Math.max(0, waterIntake + amount);
       setWaterIntake(newVal);
       localStorage.setItem(`water_${todayStr}`, newVal.toString());
+  };
+
+  const handleSaveWater = () => {
+      setWaterIntake(tempWater);
+      localStorage.setItem(`water_${todayStr}`, tempWater.toString());
+      setShowWaterModal(false);
   };
 
   const handleSaveSteps = () => {
@@ -304,11 +314,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
               </div>
 
               {/* Water Widget */}
-              <div className="bg-gradient-to-br from-blue-500 to-cyan-400 p-5 rounded-3xl shadow-lg text-white relative overflow-hidden">
+              <div 
+                onClick={() => { setTempWater(waterIntake); setShowWaterModal(true); }}
+                className="bg-gradient-to-br from-blue-500 to-cyan-400 p-5 rounded-3xl shadow-lg text-white relative overflow-hidden cursor-pointer"
+              >
                    <div className="relative z-10 flex flex-col h-full justify-between">
                         <div className="flex justify-between items-start">
                             <Droplets size={24}/>
-                            <button onClick={() => updateWater(250)} className="bg-white/20 p-1 rounded-lg hover:bg-white/30 transition-colors"><Plus size={16}/></button>
+                            <div className="flex gap-1">
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); updateWater(-250); }} 
+                                    className="bg-white/20 p-1 rounded-lg hover:bg-white/30 transition-colors"
+                                >
+                                    <Minus size={16}/>
+                                </button>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); updateWater(250); }} 
+                                    className="bg-white/20 p-1 rounded-lg hover:bg-white/30 transition-colors"
+                                >
+                                    <Plus size={16}/>
+                                </button>
+                            </div>
                         </div>
                         <div>
                             <span className="text-3xl font-black block mb-1">{waterIntake}</span>
@@ -385,6 +411,44 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
                       </div>
 
                       <button onClick={handleSaveSteps} className="w-full bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+                          <Save size={18}/> {t.save}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Water Edit Modal */}
+      {showWaterModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-lg font-bold flex items-center gap-2"><Droplets className="text-cyan-400"/> {t.editWater}</h3>
+                      <button onClick={() => setShowWaterModal(false)}><X size={20} className="text-gray-400"/></button>
+                  </div>
+                  
+                  <div className="space-y-6">
+                      <div className="flex items-center justify-center gap-4">
+                          <button onClick={() => setTempWater(Math.max(0, tempWater - 250))} className="p-3 bg-gray-100 dark:bg-charcoal-900 rounded-full"><Minus size={20}/></button>
+                          <div className="relative">
+                              <input 
+                                  type="number" 
+                                  value={tempWater} 
+                                  onChange={(e) => setTempWater(parseInt(e.target.value) || 0)} 
+                                  className="w-28 text-center text-3xl font-bold bg-transparent outline-none border-b-2 border-gray-200 dark:border-charcoal-600 focus:border-cyan-400" 
+                              />
+                              <span className="absolute -right-6 bottom-2 text-xs text-gray-500">ml</span>
+                          </div>
+                          <button onClick={() => setTempWater(tempWater + 250)} className="p-3 bg-gray-100 dark:bg-charcoal-900 rounded-full"><Plus size={20}/></button>
+                      </div>
+                      
+                      <div className="flex justify-center gap-2">
+                          <button onClick={() => setTempWater(Math.max(0, tempWater - 250))} className="px-3 py-1 bg-gray-100 dark:bg-charcoal-900 rounded-lg text-xs font-bold text-gray-500 hover:text-red-400">-250</button>
+                          <button onClick={() => setTempWater(tempWater + 250)} className="px-3 py-1 bg-gray-100 dark:bg-charcoal-900 rounded-lg text-xs font-bold text-gray-500 hover:text-cyan-400">+250</button>
+                          <button onClick={() => setTempWater(tempWater + 500)} className="px-3 py-1 bg-gray-100 dark:bg-charcoal-900 rounded-lg text-xs font-bold text-gray-500 hover:text-cyan-400">+500</button>
+                      </div>
+
+                      <button onClick={handleSaveWater} className="w-full bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2">
                           <Save size={18}/> {t.save}
                       </button>
                   </div>

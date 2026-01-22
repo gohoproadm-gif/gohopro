@@ -1399,11 +1399,111 @@ const Workout: React.FC<WorkoutProps> = ({
                         ))}
 
                         {getTimelineItems().length === 0 && (
-                            <div className="pl-10 text-gray-400 text-sm py-4">
-                                {t.noEvents}
+                            <div className="pl-10 text-gray-400 text-sm py-8 flex flex-col items-center gap-3">
+                                <p>{t.noEvents}</p>
+                                <button 
+                                    onClick={() => setMode('PLANS')}
+                                    className="px-4 py-2 bg-charcoal-100 dark:bg-charcoal-700 hover:bg-neon-blue hover:text-charcoal-900 rounded-full text-xs font-bold transition-colors"
+                                >
+                                    從課表庫挑選
+                                </button>
                             </div>
                         )}
                     </div>
+                </div>
+            </div>
+        )}
+
+        {mode === 'PLANS' && (
+            <div className="space-y-6 animate-fade-in">
+                {/* Creation Actions */}
+                <div className="grid grid-cols-3 gap-2">
+                    <button onClick={() => setMode('CREATE')} className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-lg shadow-indigo-500/20 active:scale-95 transition-all">
+                        <Sparkles size={24} className="mb-2" />
+                        <span className="text-xs font-bold">{t.ai}</span>
+                    </button>
+                    <button onClick={() => setMode('MANUAL_CREATE')} className="flex flex-col items-center justify-center p-4 bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm active:scale-95 transition-all">
+                        <PenTool size={24} className="mb-2 text-neon-blue" />
+                        <span className="text-xs font-bold">{t.manual}</span>
+                    </button>
+                    <button onClick={() => setMode('IMPORT_TEXT')} className="flex flex-col items-center justify-center p-4 bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm active:scale-95 transition-all">
+                        <ClipboardPaste size={24} className="mb-2 text-neon-green" />
+                        <span className="text-xs font-bold">{t.import}</span>
+                    </button>
+                </div>
+
+                {/* Plans List */}
+                <div className="space-y-4">
+                    {allPlans.map((plan) => (
+                        <div key={plan.id} className="bg-white dark:bg-charcoal-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-charcoal-700 flex flex-col gap-4 relative overflow-hidden group">
+                            <div className="flex justify-between items-start z-10">
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                                        {plan.title}
+                                    </h3>
+                                    <p className="text-xs text-gray-500 font-medium bg-gray-100 dark:bg-charcoal-900 px-2 py-1 rounded inline-block mt-1">
+                                        {plan.focus} • {plan.duration} min
+                                    </p>
+                                </div>
+                                {/* Actions Menu */}
+                                <div className="flex items-center gap-1">
+                                     <button 
+                                        onClick={(e) => handleEditPlan(e, plan)}
+                                        className="p-2 text-gray-400 hover:text-neon-blue hover:bg-gray-100 dark:hover:bg-charcoal-700 rounded-full transition-colors"
+                                     >
+                                         <Pencil size={16} />
+                                     </button>
+                                     <button 
+                                        onClick={(e) => initiateDelete(e, 'PLAN', plan.id, plan.title)}
+                                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-charcoal-700 rounded-full transition-colors"
+                                     >
+                                         <Trash2 size={16} />
+                                     </button>
+                                </div>
+                            </div>
+
+                            {/* Preview Exercises (First 3) */}
+                            <div className="space-y-1 z-10">
+                                {plan.exercises.slice(0, 3).map((ex, i) => (
+                                    <div key={i} className="text-xs text-gray-600 dark:text-gray-400 flex justify-between items-center border-b border-dashed border-gray-100 dark:border-charcoal-700 pb-1 last:border-0">
+                                        <span>{ex.name}</span>
+                                        <span className="font-mono opacity-70">{ex.sets} x {ex.reps}</span>
+                                    </div>
+                                ))}
+                                {plan.exercises.length > 3 && (
+                                    <p className="text-[10px] text-gray-400 italic mt-1">... +{plan.exercises.length - 3} more</p>
+                                )}
+                            </div>
+
+                            {/* Main Action Buttons */}
+                            <div className="grid grid-cols-2 gap-3 z-10 pt-2">
+                                <button 
+                                    onClick={() => {
+                                        // Quick Schedule to selected Date
+                                        const newSchedule = [...schedule, { date: selectedDate, planId: plan.id, completed: false }];
+                                        setSchedule(newSchedule);
+                                        apiSaveSchedule(newSchedule);
+                                        setMode('TIMETABLE');
+                                    }}
+                                    className="py-2.5 rounded-xl text-xs font-bold border border-gray-200 dark:border-charcoal-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-charcoal-700 flex items-center justify-center gap-2 transition-colors"
+                                >
+                                    <CalendarIcon size={14} /> {t.addToSchedule}
+                                </button>
+                                <button 
+                                    onClick={() => handleStartSession(plan)}
+                                    className="py-2.5 rounded-xl text-xs font-bold bg-cta-orange text-white hover:bg-cta-hover shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                                >
+                                    <Dumbbell size={14} /> {t.start}
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                    
+                    {allPlans.length === 0 && (
+                        <div className="text-center py-10 text-gray-400">
+                            <p>尚無課表，請建立一個！</p>
+                        </div>
+                    )}
                 </div>
             </div>
         )}
