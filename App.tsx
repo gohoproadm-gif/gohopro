@@ -225,7 +225,11 @@ const App: React.FC = () => {
   if (!isAuthenticated) {
       return (
         <div className={isDarkMode ? 'dark' : ''}>
-           <Login onLoginSuccess={handleLoginSuccess} />
+           <Login 
+                onLoginSuccess={handleLoginSuccess} 
+                language={language} 
+                setLanguage={setLanguage} 
+           />
         </div>
       );
   }

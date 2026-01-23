@@ -131,15 +131,10 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
           if (generatedImages[selectedTutorial.id]) {
               setDisplayImage(generatedImages[selectedTutorial.id]);
           } 
-          // Priority 2: Check Static Image from Constants
+          // Priority 2: Use Standardized Image from Constants
           else if (selectedTutorial.image) {
               setDisplayImage(selectedTutorial.image);
           } 
-          // Priority 3: Placeholder
-          else {
-              const placeholder = generateOfflinePlaceholder(selectedTutorial);
-              setDisplayImage(placeholder);
-          }
       } else {
           setDisplayImage(null);
       }
@@ -182,25 +177,6 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
           case '進階': return 'w-full';
           default: return 'w-0';
       }
-  };
-
-  const generateOfflinePlaceholder = (tutorial: Tutorial): string => {
-    const colors: Record<string, string> = {
-        '胸部': '#ea580c', '背部': '#c084fc', '腿部': '#a3e635', 
-        '肩膀': '#22d3ee', '手臂': '#facc15', '核心': '#f87171', '有氧': '#2dd4bf',
-    };
-    
-    const accentColor = colors[tutorial.bodyPart] || '#9ca3af';
-    
-    // Updated placeholder text to direct user to actions
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" style="background-color: #f8fafc;">
-        <rect width="100%" height="100%" fill="white" />
-        <text x="200" y="140" font-family="sans-serif" font-weight="bold" font-size="24" fill="${accentColor}" text-anchor="middle">${tutorial.name}</text>
-        <text x="200" y="180" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">請選擇下方功能獲取示範</text>
-      </svg>
-    `;
-    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
   };
 
   // Robust API Key Retrieval
@@ -457,7 +433,7 @@ const Tutorials: React.FC<TutorialsProps> = ({ userProfile, onGoToSettings }) =>
           <div className="bg-white dark:bg-charcoal-800 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto flex flex-col">
              
              {/* Media Area */}
-             <div className="relative h-64 md:h-80 bg-black border-b border-gray-200 dark:border-charcoal-700 shrink-0 group">
+             <div className="relative h-64 md:h-80 bg-gray-50 dark:bg-charcoal-900 border-b border-gray-200 dark:border-charcoal-700 shrink-0 group">
                 <button onClick={() => setSelectedTutorial(null)} className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full backdrop-blur-md transition-colors z-20"><X size={20} /></button>
                 
                 <div className="w-full h-full flex items-center justify-center overflow-hidden relative">

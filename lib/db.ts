@@ -7,6 +7,17 @@ import { MOCK_HISTORY, NUTRITION_LOGS } from '../constants';
 // Checks if the user is logged in and Firestore is initialized
 const isCloudEnabled = () => !!db && !!auth?.currentUser;
 
+// Helper to handle permission errors silently to prevent app disruption
+const handleDbError = (context: string, e: any) => {
+    // If it's a permission error or resource exhausted, likely due to Firestore rules/quotas.
+    // We log a warning instead of error to reduce noise, and return null/default.
+    if (e?.code === 'permission-denied' || e?.code === 'resource-exhausted') {
+        console.warn(`[DB] Access restricted for ${context}. Falling back to local/offline mode.`);
+    } else {
+        console.error(`[DB] Error in ${context}`, e);
+    }
+};
+
 // --- SYSTEM KEYS (CLOUD SYNC) ---
 export const apiGetSystemKeys = async (): Promise<any> => {
     // Allows any authenticated user to READ the system config (assuming Firestore rules allow it)
@@ -18,7 +29,7 @@ export const apiGetSystemKeys = async (): Promise<any> => {
                 return docSnap.data();
             }
         } catch (e) {
-            console.error("Cloud fetch system keys error", e);
+            handleDbError("apiGetSystemKeys", e);
         }
     }
     return null;
@@ -50,7 +61,7 @@ export const apiGetUserProfile = async (): Promise<UserProfile | null> => {
                 return profile;
             }
         } catch (e) {
-            console.error("Cloud fetch profile error", e);
+            handleDbError("apiGetUserProfile", e);
         }
     }
     // Fallback to local
@@ -66,7 +77,7 @@ export const apiSaveUserProfile = async (profile: UserProfile): Promise<void> =>
         try {
             await setDoc(doc(db, "users", auth.currentUser.uid), profile, { merge: true });
         } catch (e) {
-            console.error("Cloud save profile error", e);
+            handleDbError("apiSaveUserProfile", e);
         }
     }
 };
@@ -86,7 +97,7 @@ export const apiGetWorkoutHistory = async (): Promise<WorkoutRecord[]> => {
             localStorage.setItem('fitlife_history', JSON.stringify(history));
             return history;
         } catch (e) {
-            console.error("Cloud fetch history error", e);
+            handleDbError("apiGetWorkoutHistory", e);
         }
     }
     const local = localStorage.getItem('fitlife_history');
@@ -105,7 +116,7 @@ export const apiSaveWorkoutRecord = async (record: WorkoutRecord): Promise<void>
         try {
             await setDoc(doc(db, `users/${auth.currentUser.uid}/workouts`, record.id), record);
         } catch (e) {
-            console.error("Cloud save workout error", e);
+            handleDbError("apiSaveWorkoutRecord", e);
         }
     }
 };
@@ -124,7 +135,7 @@ export const apiDeleteWorkoutRecord = async (recordId: string): Promise<void> =>
         try {
             await deleteDoc(doc(db, `users/${auth.currentUser.uid}/workouts`, recordId));
         } catch (e) {
-            console.error("Cloud delete workout error", e);
+            handleDbError("apiDeleteWorkoutRecord", e);
         }
     }
 };
@@ -144,7 +155,7 @@ export const apiGetNutritionLogs = async (): Promise<NutritionLog[]> => {
             localStorage.setItem('fitlife_nutrition', JSON.stringify(logs));
             return logs;
         } catch (e) {
-            console.error("Cloud fetch nutrition error", e);
+             handleDbError("apiGetNutritionLogs", e);
         }
     }
     const local = localStorage.getItem('fitlife_nutrition');
@@ -166,7 +177,7 @@ export const apiSaveNutritionLog = async (log: NutritionLog): Promise<void> => {
         try {
             await setDoc(doc(db, `users/${auth.currentUser.uid}/nutrition`, log.id), log);
         } catch (e) {
-            console.error("Cloud save nutrition error", e);
+            handleDbError("apiSaveNutritionLog", e);
         }
     }
 };
@@ -176,7 +187,7 @@ export const apiDeleteNutritionLog = async (logId: string): Promise<void> => {
         try {
             await deleteDoc(doc(db, `users/${auth.currentUser.uid}/nutrition`, logId));
         } catch (e) {
-            console.error("Cloud delete nutrition error", e);
+            handleDbError("apiDeleteNutritionLog", e);
         }
     }
 };
@@ -195,7 +206,7 @@ export const apiGetSchedule = async (): Promise<ScheduledWorkout[]> => {
                 return schedule;
             }
         } catch (e) {
-            console.error("Cloud fetch schedule error", e);
+            handleDbError("apiGetSchedule", e);
         }
     }
     const local = localStorage.getItem('fitlife_schedule');
@@ -210,7 +221,7 @@ export const apiSaveSchedule = async (schedule: ScheduledWorkout[]): Promise<voi
             // Save schedule as a single array inside a document for simplicity
             await setDoc(doc(db, `users/${auth.currentUser.uid}/settings/schedule`), { items: schedule });
         } catch (e) {
-            console.error("Cloud save schedule error", e);
+            handleDbError("apiSaveSchedule", e);
         }
     }
 };
@@ -227,7 +238,7 @@ export const apiGetEvents = async (): Promise<CalendarEvent[]> => {
             localStorage.setItem('fitlife_events', JSON.stringify(events));
             return events;
         } catch (e) {
-            console.error("Cloud fetch events error", e);
+            handleDbError("apiGetEvents", e);
         }
     }
     const local = localStorage.getItem('fitlife_events');
@@ -246,7 +257,7 @@ export const apiSaveEvent = async (event: CalendarEvent): Promise<void> => {
         try {
             await setDoc(doc(db, `users/${auth.currentUser.uid}/events`, event.id), event);
         } catch (e) {
-            console.error("Cloud save event error", e);
+             handleDbError("apiSaveEvent", e);
         }
     }
 };
@@ -264,7 +275,7 @@ export const apiDeleteEvent = async (eventId: string): Promise<void> => {
         try {
             await deleteDoc(doc(db, `users/${auth.currentUser.uid}/events`, eventId));
         } catch (e) {
-            console.error("Cloud delete event error", e);
+            handleDbError("apiDeleteEvent", e);
         }
     }
 };
