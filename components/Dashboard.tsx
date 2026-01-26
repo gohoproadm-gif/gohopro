@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Activity, Flame, Clock, Trophy, User, ArrowRight, Target, Droplets, Plus, Minus, Edit2, X, Save, Utensils, CalendarDays, CheckCircle2, Play, Dumbbell } from 'lucide-react';
+import { Activity, Flame, Clock, Trophy, User, ArrowRight, Target, Droplets, Plus, Minus, Edit2, X, Save, Utensils, CalendarDays, CheckCircle2, Play, Dumbbell, Award, Zap, Crown, Star, Moon, Sun } from 'lucide-react';
 import { MOTIVATIONAL_QUOTES, DEFAULT_PLANS } from '../constants';
 import { NutritionLog, UserProfile, ScheduledWorkout, DailyPlan, Language, WorkoutRecord } from '../types';
 
@@ -31,7 +31,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
         editWater: '編輯飲水',
         save: '儲存',
         progress: '達成',
-        macros: '營養素'
+        macros: '營養素',
+        level: '等級',
+        xp: '經驗值',
+        badges: '成就徽章',
+        nextLevel: '距離下一級',
+        totalWorkouts: '總訓練次數'
     },
     en: {
         goodMorning: 'Good Morning',
@@ -48,7 +53,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
         editWater: 'Edit Water',
         save: 'Save',
         progress: 'Progress',
-        macros: 'Macros'
+        macros: 'Macros',
+        level: 'Level',
+        xp: 'XP',
+        badges: 'Badges',
+        nextLevel: 'Next Level',
+        totalWorkouts: 'Total Workouts'
     }
   }[language];
 
@@ -115,7 +125,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
 
     // 2. If no schedule, suggest based on last workout or default
     if (historyLogs.length > 0) {
-        const lastWorkout = historyLogs[0];
         // Simple rotation logic or just suggest something different
         const allPlans = JSON.parse(localStorage.getItem('fitlife_plans') || JSON.stringify(DEFAULT_PLANS));
         const randomPlan = allPlans[Math.floor(Math.random() * allPlans.length)];
@@ -176,6 +185,67 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
     };
   };
 
+  // --- GAMIFICATION LOGIC ---
+  const gamificationStats = useMemo(() => {
+      let totalXP = 0;
+      let totalWorkouts = historyLogs.length;
+      let totalVolume = 0;
+      let morningWorkouts = 0;
+      let nightWorkouts = 0;
+      
+      historyLogs.forEach(log => {
+          // 1 minute = 5 XP
+          totalXP += log.duration * 5;
+          // 1 completed workout = 100 XP
+          totalXP += 100;
+          
+          // Check time for badges
+          const hour = new Date(log.date).getHours(); // Note: log.date is currently YYYY-MM-DD, strict time check needs timestamp. Assuming approximate for now or if timestamp available.
+          // Fallback if date string doesn't have time, random assignment for mock feels
+          // For a real app, log.date should be ISO string with time.
+          // Let's rely on basic heuristics if simple date.
+          
+          if (log.details) {
+              log.details.forEach(ex => {
+                  ex.sets.forEach(s => {
+                      if(s.completed && s.weight > 0) {
+                          const vol = s.weight * s.reps;
+                          totalVolume += vol;
+                          // 100kg volume = 1 XP
+                          totalXP += Math.floor(vol / 100);
+                      }
+                  });
+              });
+          }
+      });
+
+      // Level Calculation: Level N requires N*1000 XP (Linear-ish progression for demo)
+      // Or: Level = Math.floor(Math.sqrt(totalXP / 100))
+      const level = Math.floor(Math.sqrt(totalXP / 50)) + 1;
+      const prevLevelXp = 50 * Math.pow(level - 1, 2);
+      const nextLevelXp = 50 * Math.pow(level, 2);
+      const currentLevelProgress = totalXP - prevLevelXp;
+      const levelRange = nextLevelXp - prevLevelXp;
+      const progressPercent = Math.min((currentLevelProgress / levelRange) * 100, 100);
+
+      // Badges
+      const badges = [];
+      if (totalWorkouts >= 1) badges.push({ id: 'first_step', icon: <CheckCircle2 size={14}/>, label: '初出茅廬', color: 'bg-gray-500' });
+      if (totalWorkouts >= 10) badges.push({ id: 'consistent', icon: <Flame size={14}/>, label: '持之以恆', color: 'bg-orange-500' });
+      if (totalWorkouts >= 50) badges.push({ id: 'veteran', icon: <Crown size={14}/>, label: '健身老手', color: 'bg-yellow-500' });
+      if (totalVolume >= 10000) badges.push({ id: 'heavy', icon: <Dumbbell size={14}/>, label: '大力士', color: 'bg-red-500' });
+      if (totalXP > 5000) badges.push({ id: 'elite', icon: <Zap size={14}/>, label: '菁英戰士', color: 'bg-purple-500' });
+
+      return {
+          totalXP,
+          level,
+          progressPercent,
+          badges,
+          nextLevelXp: Math.floor(nextLevelXp),
+          currentXP: Math.floor(totalXP)
+      };
+  }, [historyLogs]);
+
   const targets = calculateTargets();
   const percentage = Math.min((totalNutrition.calories / targets.calories) * 100, 100);
   const pPercent = Math.min((totalNutrition.p / targets.protein) * 100, 100);
@@ -212,7 +282,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
         <div className="absolute flex flex-col items-center justify-center text-center">
              <Flame size={24} className="text-cta-orange mb-1" />
              <span className="text-2xl font-black text-gray-800 dark:text-white">{totalNutrition.calories}</span>
-             <span className="text-[10px] text-gray-400">/ {targets.calories}</span>
+             <span className="text-xs text-gray-400">/ {targets.calories}</span>
         </div>
       </div>
     );
@@ -222,10 +292,57 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
 
   return (
     <div className="space-y-6">
-      <header className="mb-2">
-        <h2 className="text-3xl font-bold mb-1">{t.goodMorning}，{userProfile.name}！</h2>
-        <p className="text-gray-500 dark:text-gray-400 italic text-sm">"{quote}"</p>
+      <header className="mb-2 flex justify-between items-end">
+        <div>
+            <h2 className="text-3xl font-bold mb-1">{t.goodMorning}，{userProfile.name}！</h2>
+            <p className="text-gray-500 dark:text-gray-400 italic text-sm">"{quote}"</p>
+        </div>
+        <div className="hidden md:block text-right">
+            <div className="text-xs text-gray-500 font-bold uppercase">{t.totalWorkouts}</div>
+            <div className="text-2xl font-black text-neon-blue">{historyLogs.length}</div>
+        </div>
       </header>
+
+      {/* Gamification Card (New) */}
+      <div className="bg-gradient-to-r from-charcoal-800 to-charcoal-900 border border-gray-700 rounded-3xl p-5 shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-8 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10"></div>
+          
+          <div className="relative z-10 flex flex-col md:flex-row gap-4 items-center justify-between">
+              <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/20 text-white font-black text-2xl border-2 border-white/20">
+                      {gamificationStats.level}
+                  </div>
+                  <div className="flex-1">
+                      <div className="flex justify-between items-end mb-1">
+                          <span className="text-sm font-bold text-gray-300 uppercase tracking-wider">{t.level} {gamificationStats.level}</span>
+                          <span className="text-xs font-mono text-neon-blue">{gamificationStats.currentXP} / {gamificationStats.nextLevelXp} XP</span>
+                      </div>
+                      <div className="h-3 w-full bg-charcoal-950 rounded-full overflow-hidden border border-white/10">
+                          <div 
+                            className="h-full bg-gradient-to-r from-neon-blue to-neon-purple transition-all duration-1000 relative" 
+                            style={{ width: `${gamificationStats.progressPercent}%` }}
+                          >
+                              <div className="absolute top-0 right-0 bottom-0 w-1 bg-white/50 blur-[1px]"></div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto mask-linear-fade">
+                  {gamificationStats.badges.length > 0 ? (
+                      gamificationStats.badges.map((badge) => (
+                          <div key={badge.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-xs font-bold shadow-md whitespace-nowrap ${badge.color}`}>
+                              {badge.icon} {badge.label}
+                          </div>
+                      ))
+                  ) : (
+                      <div className="text-xs text-gray-500 flex items-center gap-2 px-2">
+                          <Award size={14} /> 持續訓練以解鎖徽章
+                      </div>
+                  )}
+              </div>
+          </div>
+      </div>
 
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -18,7 +18,7 @@ interface WorkoutProps {
   nutritionLogs: NutritionLog[];
   onDeleteNutrition: (id: string) => Promise<void>;
   language: Language;
-  externalPlanToStart?: DailyPlan | null; // New Prop
+  externalPlanToStart?: DailyPlan | null;
 }
 
 // Singleton AudioContext to prevent browser limits
@@ -68,17 +68,11 @@ const playBeep = (count: number = 1) => {
     }
 };
 
-// Utility to clean JSON string from Markdown blocks AND DeepSeek <think> tags
+// Utility to clean JSON string
 const cleanJson = (text: string) => {
     if (!text) return "{}";
-    
-    // 1. Remove DeepSeek R1 <think> tags content
     let clean = text.replace(/<think>[\s\S]*?<\/think>/g, '');
-    
-    // 2. Remove Markdown code blocks
     clean = clean.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    // 3. Extract JSON object
     const firstBrace = clean.indexOf('{');
     const lastBrace = clean.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1) {
@@ -132,19 +126,7 @@ const Workout: React.FC<WorkoutProps> = ({
           return DEFAULT_PLANS;
       }
   });
-
-  // Delete Confirmation State
-  const [deleteConfirmation, setDeleteConfirmation] = useState<{
-      isOpen: boolean, 
-      type: 'PLAN' | 'MEAL' | 'EVENT' | 'WORKOUT',
-      id: string | null, 
-      title: string
-  }>({
-      isOpen: false,
-      type: 'PLAN',
-      id: null,
-      title: ''
-  });
+  const [planToDeleteId, setPlanToDeleteId] = useState<string | null>(null);
 
   // AI State
   const [aiPrompt, setAiPrompt] = useState('');
@@ -159,6 +141,8 @@ const Workout: React.FC<WorkoutProps> = ({
 
   // Manual Create / Edit State
   const [manualPlanTitle, setManualPlanTitle] = useState('');
+  const [manualFocus, setManualFocus] = useState('');
+  const [manualDuration, setManualDuration] = useState(60);
   const [manualExercises, setManualExercises] = useState<{name: string, sets: number, reps: string, weight: number, section: 'warmup' | 'main' | 'core'}[]>([]);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
 
@@ -183,12 +167,12 @@ const Workout: React.FC<WorkoutProps> = ({
         skip: '跳過',
         done: '完成！',
         save: '儲存紀錄',
-        manual: '手動建立課表',
+        manual: '手動建立',
         ai: 'AI 智慧排課',
-        import: '貼上文字匯入課表',
+        import: '文字匯入',
         createPlan: '生成課表',
         generating: 'AI 思考中...',
-        analyzing: '自動轉換為課表',
+        analyzing: '分析並轉換',
         planName: '課表名稱',
         addExercise: '新增動作',
         savePlan: '儲存課表',
@@ -222,12 +206,12 @@ const Workout: React.FC<WorkoutProps> = ({
         skip: 'Skip',
         done: 'Completed!',
         save: 'Save Record',
-        manual: 'Manual Create',
+        manual: 'Manual',
         ai: 'AI Generator',
-        import: 'Import from Text',
+        import: 'Import Text',
         createPlan: 'Generate Plan',
         generating: 'Thinking...',
-        analyzing: 'Convert to Plan',
+        analyzing: 'Analyze & Convert',
         planName: 'Plan Name',
         addExercise: 'Add Exercise',
         savePlan: 'Save Plan',
@@ -254,16 +238,10 @@ const Workout: React.FC<WorkoutProps> = ({
   useEffect(() => {
     const loadData = async () => {
         let s = await apiGetSchedule();
-        
-        // --- STICKINESS FIX: Auto-populate Starter Schedule if empty ---
         if (s.length === 0) {
-            console.log("Empty schedule detected, generating default starter pack.");
             const today = new Date();
             const starterSchedule: ScheduledWorkout[] = [];
-            
-            // Generate schedule: Plan 1 (Today), Plan 2 (Tomorrow), Rest, Plan 3 (Day 3)
             const plans = [DEFAULT_PLANS[0], DEFAULT_PLANS[1], null, DEFAULT_PLANS[2]];
-            
             plans.forEach((plan, i) => {
                 if (plan) {
                     const d = new Date(today);
@@ -275,19 +253,16 @@ const Workout: React.FC<WorkoutProps> = ({
                     });
                 }
             });
-            
             s = starterSchedule;
             setSchedule(s);
             apiSaveSchedule(s); 
         } else {
             setSchedule(s);
         }
-
         const e = await apiGetEvents();
         setEvents(e);
     };
     loadData();
-
     if ("Notification" in window && Notification.permission !== "granted") {
         Notification.requestPermission();
     }
@@ -399,20 +374,14 @@ const Workout: React.FC<WorkoutProps> = ({
       const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 = Sun
 
       const days = [];
-      
-      // Empty slots
       for (let i = 0; i < firstDayOfWeek; i++) {
           days.push(null);
       }
-
       for (let i = 1; i <= daysInMonth; i++) {
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-          
-          // Find workout status
           const dayWorkouts = schedule.filter(s => s.date === dateStr);
           const hasWorkout = dayWorkouts.length > 0;
           const isCompleted = dayWorkouts.length > 0 && dayWorkouts.every(s => s.completed);
-
           days.push({
               day: i,
               dateStr: dateStr,
@@ -437,12 +406,6 @@ const Workout: React.FC<WorkoutProps> = ({
       localStorage.setItem('fitlife_plans', JSON.stringify(newPlans));
   };
 
-  const requestNotificationPermission = () => {
-      if ("Notification" in window) {
-          Notification.requestPermission();
-      }
-  };
-
   const findLastSessionStats = (exerciseName: string) => {
       for (const record of historyLogs) {
           if (!record.details) continue;
@@ -460,13 +423,10 @@ const Workout: React.FC<WorkoutProps> = ({
   const handleStartSession = (plan: DailyPlan) => {
       setActivePlan(plan);
       setSessionStartTime(Date.now());
-      
       const initialLogs: Record<string, ExerciseSetLog[]> = {};
-      
       plan.exercises.forEach(ex => {
           let defaultWeight = ex.weight || 0;
           let defaultReps = parseInt(ex.reps) || 10;
-
           if (defaultWeight === 0) {
               const lastStats = findLastSessionStats(ex.name);
               if (lastStats) {
@@ -474,7 +434,6 @@ const Workout: React.FC<WorkoutProps> = ({
                   defaultReps = lastStats.reps;
               }
           }
-
           initialLogs[ex.id] = Array(ex.sets).fill(null).map((_, i) => ({
               setNumber: i + 1,
               weight: defaultWeight,
@@ -497,7 +456,6 @@ const Workout: React.FC<WorkoutProps> = ({
       let volume = 0;
       let completedSets = 0;
       let totalSets = 0;
-
       Object.values(sessionLogs).forEach((logs: ExerciseSetLog[]) => {
           totalSets += logs.length;
           logs.forEach(l => {
@@ -507,14 +465,12 @@ const Workout: React.FC<WorkoutProps> = ({
               }
           });
       });
-
       return { duration, volume, completedSets, totalSets };
   };
 
   const handleConfirmFinish = async () => {
       if (!activePlan) return;
       const { duration } = calculateSessionStats();
-      
       const record: WorkoutRecord = {
           id: Date.now().toString(),
           date: new Date().toISOString().split('T')[0],
@@ -527,11 +483,9 @@ const Workout: React.FC<WorkoutProps> = ({
               sets: sessionLogs[ex.id] || []
           }))
       };
-
       if (onFinishWorkout) {
           onFinishWorkout(record);
       }
-      
       const newSchedule = schedule.map(s => {
           if (s.date === selectedDate && s.planId === activePlan.id) {
               return { ...s, completed: true };
@@ -540,7 +494,6 @@ const Workout: React.FC<WorkoutProps> = ({
       });
       setSchedule(newSchedule);
       await apiSaveSchedule(newSchedule);
-
       localStorage.removeItem('fitlife_active_session');
       setActivePlan(null);
       setMode('TIMETABLE');
@@ -551,7 +504,6 @@ const Workout: React.FC<WorkoutProps> = ({
       setSessionLogs(prev => {
           const logs = [...(prev[exerciseId] || [])];
           const currentVal = logs[setIndex][field];
-          // Prevent negative values
           const newVal = Math.max(0, currentVal + delta);
           logs[setIndex] = { ...logs[setIndex], [field]: newVal };
           return { ...prev, [exerciseId]: logs };
@@ -559,7 +511,7 @@ const Workout: React.FC<WorkoutProps> = ({
   };
 
   const copyPreviousSet = (exerciseId: string, setIndex: number) => {
-      if (setIndex === 0) return; // Cannot copy for first set
+      if (setIndex === 0) return;
       setSessionLogs(prev => {
           const logs = [...(prev[exerciseId] || [])];
           const prevSet = logs[setIndex - 1];
@@ -584,7 +536,6 @@ const Workout: React.FC<WorkoutProps> = ({
           if (isComplete) {
               setRestTimer(60); 
               setIsResting(true);
-              
               if (!audioCtx) {
                   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
                   if (AudioContextClass) audioCtx = new AudioContextClass();
@@ -632,10 +583,7 @@ const Workout: React.FC<WorkoutProps> = ({
                           </div>
                           {sessionLogs[exercise.id]?.map((set, idx) => (
                               <div key={idx} className={`relative grid grid-cols-10 gap-2 items-center p-2 rounded-xl transition-all ${set.completed ? 'bg-neon-green/10 border border-neon-green/30' : 'bg-gray-50 dark:bg-charcoal-900 border border-transparent'}`}>
-                                  {/* Set Number */}
                                   <div className="col-span-1 text-center font-bold text-gray-500 text-sm">{idx + 1}</div>
-                                  
-                                  {/* Weight Control */}
                                   <div className="col-span-4 flex items-center justify-center bg-white dark:bg-charcoal-800 rounded-lg border border-gray-200 dark:border-charcoal-700 overflow-hidden h-10">
                                       <button onClick={() => adjustValue(exercise.id, idx, 'weight', -2.5)} className="w-8 h-full flex items-center justify-center bg-gray-100 dark:bg-charcoal-700 hover:bg-gray-200 active:bg-gray-300 text-gray-500 font-bold">-</button>
                                       <input 
@@ -647,8 +595,6 @@ const Workout: React.FC<WorkoutProps> = ({
                                       />
                                       <button onClick={() => adjustValue(exercise.id, idx, 'weight', 2.5)} className="w-8 h-full flex items-center justify-center bg-gray-100 dark:bg-charcoal-700 hover:bg-gray-200 active:bg-gray-300 text-gray-500 font-bold">+</button>
                                   </div>
-
-                                  {/* Reps Control */}
                                   <div className="col-span-4 flex items-center justify-center bg-white dark:bg-charcoal-800 rounded-lg border border-gray-200 dark:border-charcoal-700 overflow-hidden h-10">
                                       <button onClick={() => adjustValue(exercise.id, idx, 'reps', -1)} className="w-8 h-full flex items-center justify-center bg-gray-100 dark:bg-charcoal-700 hover:bg-gray-200 active:bg-gray-300 text-gray-500 font-bold">-</button>
                                       <input 
@@ -660,8 +606,6 @@ const Workout: React.FC<WorkoutProps> = ({
                                       />
                                       <button onClick={() => adjustValue(exercise.id, idx, 'reps', 1)} className="w-8 h-full flex items-center justify-center bg-gray-100 dark:bg-charcoal-700 hover:bg-gray-200 active:bg-gray-300 text-gray-500 font-bold">+</button>
                                   </div>
-
-                                  {/* Check Button */}
                                   <div className="col-span-1 flex justify-center">
                                       <button 
                                         onClick={() => toggleSetComplete(exercise.id, idx)} 
@@ -670,8 +614,6 @@ const Workout: React.FC<WorkoutProps> = ({
                                           <Check size={16} strokeWidth={3} />
                                       </button>
                                   </div>
-
-                                  {/* Copy Previous Hint (Only for 2nd set onwards and not completed) */}
                                   {idx > 0 && !set.completed && !set.weight && (
                                       <button 
                                         onClick={() => copyPreviousSet(exercise.id, idx)}
@@ -690,8 +632,6 @@ const Workout: React.FC<WorkoutProps> = ({
       );
   };
 
-  // ... (API and Logic Helpers remain largely same, cutting out for brevity in change block but assume logic persists) ...
-  // Re-implementing necessary helpers for the rest of the component
   const getApiKey = () => {
     const systemKey = localStorage.getItem('GO_SYSTEM_GOOGLE_API_KEY');
     if (systemKey) return systemKey;
@@ -765,6 +705,71 @@ const Workout: React.FC<WorkoutProps> = ({
       return JSON.parse(cleanJson(response.text || "{}"));
   };
 
+  // --- Plan Management Helpers ---
+  const resetManualForm = () => {
+      setManualPlanTitle('');
+      setManualFocus('');
+      setManualDuration(60);
+      setManualExercises([]);
+      setEditingPlanId(null);
+  };
+
+  const handleSaveManualPlan = async () => {
+      if (!manualPlanTitle.trim()) return;
+      
+      const newPlan: DailyPlan = {
+          id: editingPlanId || 'custom_' + Date.now(),
+          title: manualPlanTitle,
+          focus: manualFocus || 'General',
+          duration: manualDuration,
+          exercises: manualExercises.map((ex, i) => ({
+              id: editingPlanId ? (allPlans.find(p => p.id === editingPlanId)?.exercises[i]?.id || `ex_${Date.now()}_${i}`) : `ex_${Date.now()}_${i}`,
+              name: ex.name || 'Exercise',
+              sets: ex.sets || 3,
+              reps: ex.reps || '10',
+              weight: ex.weight || 0,
+              section: ex.section,
+              completed: false
+          }))
+      };
+
+      let updatedPlans;
+      if (editingPlanId) {
+          updatedPlans = allPlans.map(p => p.id === editingPlanId ? newPlan : p);
+      } else {
+          updatedPlans = [...allPlans, newPlan];
+      }
+      
+      updateAndSavePlans(updatedPlans);
+      resetManualForm();
+      setMode('PLANS');
+  };
+
+  const handleAddManualExercise = () => {
+      setManualExercises([...manualExercises, { name: '', sets: 3, reps: '10', weight: 0, section: 'main' }]);
+  };
+
+  const updateManualExercise = (index: number, field: string, value: any) => {
+      const updated = [...manualExercises];
+      (updated[index] as any)[field] = value;
+      setManualExercises(updated);
+  };
+
+  const removeManualExercise = (index: number) => {
+      const updated = [...manualExercises];
+      updated.splice(index, 1);
+      setManualExercises(updated);
+  };
+
+  const confirmDeletePlan = () => {
+      if (planToDeleteId) {
+          const updatedPlans = allPlans.filter(p => p.id !== planToDeleteId);
+          updateAndSavePlans(updatedPlans);
+          setPlanToDeleteId(null);
+      }
+  };
+
+  // --- AI Logic ---
   const handleGeneratePlan = async () => {
       if (!aiPrompt.trim()) return;
       setAiError(null);
@@ -823,15 +828,60 @@ const Workout: React.FC<WorkoutProps> = ({
                       completed: false
                   }))
               };
-              const newSchedule = [...schedule, { date: selectedDate, planId: newPlan.id, completed: false }];
-              setSchedule(newSchedule);
-              await apiSaveSchedule(newSchedule);
               updateAndSavePlans([...allPlans, newPlan]);
               setAiPrompt('');
-              setMode('TIMETABLE');
+              setMode('PLANS');
           }
       } catch (e: any) {
           setAiError("生成失敗: " + (e.message || "未知錯誤"));
+      } finally {
+          setIsGenerating(false);
+      }
+  };
+
+  const handleAnalyzeImport = async () => {
+      if (!importText.trim()) return;
+      setIsGenerating(true);
+      setAiError(null);
+      
+      const systemPrompt = `Parse the user's workout text into a structured JSON plan.
+      Output JSON format: { "title": "Plan Name", "focus": "Target Body Part", "duration": 60, "exercises": [ { "name": "Exercise Name", "sets": 3, "reps": "10", "section": "warmup" | "main" | "core" } ] }
+      If language is mixed, prefer Traditional Chinese for output.`;
+
+      const userPromptMsg = importText;
+      const { apiKey } = getDeepSeekConfig();
+      let shouldUseOpenAI = userProfile.aiProvider === 'openai';
+
+      try {
+          let result;
+          if (shouldUseOpenAI && apiKey) {
+               try { result = await callOpenAI(userPromptMsg, systemPrompt); } 
+               catch (e) { result = await callGemini(`System: ${systemPrompt}. User: ${importText}`); }
+          } else {
+               result = await callGemini(`System: ${systemPrompt}. User: ${importText}`);
+          }
+
+          if (result) {
+               const newPlan: DailyPlan = {
+                  id: 'import_' + Date.now(),
+                  title: result.title || 'Imported Plan',
+                  focus: result.focus || 'Custom',
+                  duration: result.duration || 60,
+                  exercises: result.exercises?.map((e: any, i: number) => ({
+                      id: `ex_${i}`,
+                      name: e.name,
+                      sets: e.sets,
+                      reps: e.reps,
+                      section: e.section || 'main',
+                      completed: false
+                  })) || []
+              };
+              updateAndSavePlans([...allPlans, newPlan]);
+              setImportText('');
+              setMode('PLANS');
+          }
+      } catch(e: any) {
+          setAiError("解析失敗: " + e.message);
       } finally {
           setIsGenerating(false);
       }
@@ -937,7 +987,7 @@ const Workout: React.FC<WorkoutProps> = ({
     <div className="space-y-6 pb-20">
         <div className="bg-gray-100 dark:bg-charcoal-800 p-1 rounded-xl flex">
             <button onClick={() => setMode('TIMETABLE')} className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${mode === 'TIMETABLE' ? 'bg-white dark:bg-charcoal-900 shadow text-charcoal-900 dark:text-white' : 'text-gray-500'}`}><CalendarIcon size={16} /> {t.timetable}</button>
-            <button onClick={() => setMode('PLANS')} className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${mode === 'PLANS' || mode === 'CREATE' ? 'bg-white dark:bg-charcoal-900 shadow text-charcoal-900 dark:text-white' : 'text-gray-500'}`}><List size={16} /> {t.library}</button>
+            <button onClick={() => setMode('PLANS')} className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${mode === 'PLANS' || mode === 'CREATE' || mode === 'MANUAL_CREATE' || mode === 'IMPORT_TEXT' ? 'bg-white dark:bg-charcoal-900 shadow text-charcoal-900 dark:text-white' : 'text-gray-500'}`}><List size={16} /> {t.library}</button>
         </div>
 
         {mode === 'TIMETABLE' && (
@@ -1017,7 +1067,6 @@ const Workout: React.FC<WorkoutProps> = ({
                                 <button onClick={() => setMode('PLANS')} className="bg-neon-blue text-charcoal-900 px-4 py-2 rounded-full text-xs font-bold hover:bg-cyan-400 transition-colors">去安排訓練</button>
                              </div>
                         )}
-                        {/* Rendering logic for schedule items kept similar to original but simplified for this block */}
                         {schedule.filter(s => s.date === selectedDate).map((s, idx) => {
                              const plan = allPlans.find(p => p.id === s.planId);
                              return (
@@ -1035,19 +1084,22 @@ const Workout: React.FC<WorkoutProps> = ({
             </div>
         )}
         
-        {/* Reuse other modes from original file structure as they are less critical to the "Stickiness" update */}
         {mode === 'PLANS' && (
             <div className="space-y-6 animate-fade-in">
-                 <div className="grid grid-cols-2 gap-2">
+                 <div className="grid grid-cols-3 gap-2">
                     <button onClick={() => setMode('CREATE')} className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-lg active:scale-95 transition-all"><Sparkles size={24} className="mb-2" /><span className="text-xs font-bold">{t.ai}</span></button>
-                    <button onClick={() => setMode('MANUAL_CREATE')} className="flex flex-col items-center justify-center p-4 bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm active:scale-95 transition-all"><PenTool size={24} className="mb-2 text-neon-blue" /><span className="text-xs font-bold">{t.manual}</span></button>
+                    <button onClick={() => { resetManualForm(); setMode('MANUAL_CREATE'); }} className="flex flex-col items-center justify-center p-4 bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm active:scale-95 transition-all"><PenTool size={24} className="mb-2 text-neon-blue" /><span className="text-xs font-bold">{t.manual}</span></button>
+                    <button onClick={() => setMode('IMPORT_TEXT')} className="flex flex-col items-center justify-center p-4 bg-white dark:bg-charcoal-800 border border-gray-200 dark:border-charcoal-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm active:scale-95 transition-all"><ClipboardPaste size={24} className="mb-2 text-neon-green" /><span className="text-xs font-bold">{t.import}</span></button>
                 </div>
                 <div className="space-y-4">
                     {allPlans.map((plan) => (
                         <div key={plan.id} className="bg-white dark:bg-charcoal-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-charcoal-700 flex flex-col gap-4">
                             <div className="flex justify-between items-start">
                                 <div><h3 className="text-lg font-bold">{plan.title}</h3><p className="text-xs text-gray-500 bg-gray-100 dark:bg-charcoal-900 px-2 py-1 rounded inline-block mt-1">{plan.focus} • {plan.duration} min</p></div>
-                                <div className="flex gap-1"><button onClick={(e) => { e.preventDefault(); setEditingPlanId(plan.id); setManualPlanTitle(plan.title); setManualExercises(plan.exercises.map(ex => ({ name: ex.name, sets: ex.sets, reps: ex.reps, weight: ex.weight || 0, section: ex.section || 'main' }))); setMode('MANUAL_CREATE'); }} className="p-2 text-gray-400 hover:text-neon-blue"><Pencil size={16}/></button></div>
+                                <div className="flex gap-1">
+                                    <button onClick={(e) => { e.preventDefault(); setEditingPlanId(plan.id); setManualPlanTitle(plan.title); setManualFocus(plan.focus); setManualDuration(plan.duration); setManualExercises(plan.exercises.map(ex => ({ name: ex.name, sets: ex.sets, reps: ex.reps, weight: ex.weight || 0, section: ex.section || 'main' }))); setMode('MANUAL_CREATE'); }} className="p-2 text-gray-400 hover:text-neon-blue"><Pencil size={16}/></button>
+                                    <button onClick={() => setPlanToDeleteId(plan.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={16}/></button>
+                                </div>
                             </div>
                             <button onClick={() => handleStartSession(plan)} className="py-2.5 rounded-xl text-xs font-bold bg-cta-orange text-white hover:bg-cta-hover shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"><Dumbbell size={14} /> {t.start}</button>
                         </div>
@@ -1056,7 +1108,6 @@ const Workout: React.FC<WorkoutProps> = ({
             </div>
         )}
         
-        {/* Include AI Creator View and others if needed (omitted for brevity as they are mostly unchanged logic-wise, but would be included in full file) */}
         {mode === 'CREATE' && (
             <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in">
                 <div className="flex justify-between items-center mb-4">
@@ -1065,6 +1116,104 @@ const Workout: React.FC<WorkoutProps> = ({
                 </div>
                 <textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder={language === 'zh' ? "例如：我只有30分鐘，想練胸肌..." : "e.g., I have 30 mins, want to train chest..."} className="w-full h-32 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-cta-orange resize-none" />
                 <button onClick={handleGeneratePlan} disabled={isGenerating || !aiPrompt.trim()} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 mt-4">{isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}{isGenerating ? (loadingTip || t.generating) : t.createPlan}</button>
+            </div>
+        )}
+
+        {mode === 'IMPORT_TEXT' && (
+            <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-lg flex items-center gap-2"><ClipboardPaste className="text-neon-green" /> {t.import}</h3>
+                    <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">直接貼上來自 Line 或備忘錄的文字課表，AI 將自動分析並建立。</p>
+                <textarea 
+                    value={importText} 
+                    onChange={(e) => setImportText(e.target.value)} 
+                    placeholder="例如：
+胸肌訓練
+1. 臥推 4組 8-10下
+2. 夾胸 3組 12下..." 
+                    className="w-full h-48 p-4 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none focus:border-neon-green resize-none font-mono text-sm" 
+                />
+                {aiError && <p className="text-xs text-red-500 mt-2">{aiError}</p>}
+                <button 
+                    onClick={handleAnalyzeImport} 
+                    disabled={isGenerating || !importText.trim()} 
+                    className="w-full bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
+                >
+                    {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}
+                    {isGenerating ? t.generating : t.analyzing}
+                </button>
+            </div>
+        )}
+
+        {mode === 'MANUAL_CREATE' && (
+            <div className="bg-white dark:bg-charcoal-800 p-6 rounded-2xl border border-gray-200 dark:border-charcoal-700 animate-fade-in space-y-4">
+                <div className="flex justify-between items-center border-b border-gray-100 dark:border-charcoal-700 pb-2">
+                    <h3 className="font-bold text-lg flex items-center gap-2"><Pencil className="text-neon-blue" /> {editingPlanId ? t.updatePlan : t.manual}</h3>
+                    <button onClick={() => setMode('PLANS')}><X size={20} className="text-gray-400"/></button>
+                </div>
+                
+                <div className="space-y-3">
+                    <input type="text" value={manualPlanTitle} onChange={(e) => setManualPlanTitle(e.target.value)} placeholder="課表名稱 (例如: 週一胸肌日)" className="w-full p-3 rounded-xl bg-gray-50 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 font-bold" />
+                    <div className="flex gap-2">
+                        <input type="text" value={manualFocus} onChange={(e) => setManualFocus(e.target.value)} placeholder="專注部位" className="flex-1 p-3 rounded-xl bg-gray-50 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 text-sm" />
+                        <div className="relative w-24">
+                            <input type="number" value={manualDuration} onChange={(e) => setManualDuration(Number(e.target.value))} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 text-center font-mono" />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">動作列表</h4>
+                    {manualExercises.map((ex, idx) => (
+                        <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-charcoal-900 rounded-lg">
+                            <input type="text" value={ex.name} onChange={(e) => updateManualExercise(idx, 'name', e.target.value)} placeholder="動作名稱" className="flex-1 bg-transparent outline-none text-sm font-bold" />
+                            <input type="number" value={ex.sets} onChange={(e) => updateManualExercise(idx, 'sets', Number(e.target.value))} className="w-10 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="組" />
+                            <input type="text" value={ex.reps} onChange={(e) => updateManualExercise(idx, 'reps', e.target.value)} className="w-12 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="次" />
+                            <button onClick={() => removeManualExercise(idx)} className="text-red-400 hover:text-red-500"><X size={16}/></button>
+                        </div>
+                    ))}
+                    <button onClick={handleAddManualExercise} className="w-full py-2 border-2 border-dashed border-gray-200 dark:border-charcoal-700 rounded-xl text-gray-400 hover:text-neon-blue hover:border-neon-blue transition-colors text-sm font-bold flex items-center justify-center gap-2">
+                        <Plus size={16} /> {t.addExercise}
+                    </button>
+                </div>
+
+                <button onClick={handleSaveManualPlan} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2">
+                    <Save size={18} /> {t.savePlan}
+                </button>
+            </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {planToDeleteId && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+                <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
+                    <div className="flex flex-col items-center text-center mb-6">
+                        <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-3 text-red-500">
+                            <Trash2 size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">刪除此課表？</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                            您確定要刪除「{allPlans.find(p => p.id === planToDeleteId)?.title}」嗎？<br/>此動作無法復原。
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => setPlanToDeleteId(null)}
+                            className="flex-1 py-2.5 rounded-xl font-bold bg-gray-100 dark:bg-charcoal-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-charcoal-600 transition-colors"
+                        >
+                            取消
+                        </button>
+                        <button 
+                            onClick={confirmDeletePlan}
+                            className="flex-1 py-2.5 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+                        >
+                            確認刪除
+                        </button>
+                    </div>
+                </div>
             </div>
         )}
     </div>
