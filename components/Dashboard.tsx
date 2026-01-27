@@ -1,8 +1,9 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
-import { Activity, Flame, Clock, Trophy, User, ArrowRight, Target, Droplets, Plus, Minus, Edit2, X, Save, Utensils, CalendarDays, CheckCircle2, Play, Dumbbell, Award, Zap, Crown, Star, Moon, Sun } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Activity, Flame, Clock, Trophy, User, ArrowRight, Target, Droplets, Plus, Minus, Edit2, X, Save, Utensils, CalendarDays, CheckCircle2, Play, Dumbbell, Award, Zap, Crown, Star, Moon, Sun, Camera, Image as ImageIcon, Trash2, Eye, EyeOff, Calendar } from 'lucide-react';
 import { MOTIVATIONAL_QUOTES, DEFAULT_PLANS } from '../constants';
 import { NutritionLog, UserProfile, ScheduledWorkout, DailyPlan, Language, WorkoutRecord } from '../types';
+import { savePhotoToDB, getPhotosFromDB, deletePhotoFromDB, compressImage, BodyPhoto } from '../lib/localDb';
 
 interface DashboardProps {
   onStartWorkout: () => void;
@@ -36,7 +37,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
         xp: '經驗值',
         badges: '成就徽章',
         nextLevel: '距離下一級',
-        totalWorkouts: '總訓練次數'
+        totalWorkouts: '總訓練次數',
+        bodyGallery: '體態追蹤相冊',
+        addPhoto: '新增照片',
+        photoPrivacy: '點擊顯示',
+        deletePhoto: '刪除',
+        noPhotos: '尚未上傳照片，記錄你的改變！',
+        confirmUpload: '確認上傳',
+        selectDate: '選擇日期'
     },
     en: {
         goodMorning: 'Good Morning',
@@ -58,7 +66,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
         xp: 'XP',
         badges: 'Badges',
         nextLevel: 'Next Level',
-        totalWorkouts: 'Total Workouts'
+        totalWorkouts: 'Total Workouts',
+        bodyGallery: 'Body Progress Gallery',
+        addPhoto: 'Add Photo',
+        photoPrivacy: 'Tap to view',
+        deletePhoto: 'Delete',
+        noPhotos: 'No photos yet. Track your progress!',
+        confirmUpload: 'Confirm Upload',
+        selectDate: 'Select Date'
     }
   }[language];
 
@@ -78,6 +93,63 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
   const [steps, setSteps] = useState(0);
   const [showStepsModal, setShowStepsModal] = useState(false);
   const [tempSteps, setTempSteps] = useState(0);
+
+  // Photo Gallery State
+  const [photos, setPhotos] = useState<BodyPhoto[]>([]);
+  const [showPhotoModal, setShowPhotoModal] = useState<{isOpen: boolean, photo: BodyPhoto | null}>({isOpen: false, photo: null});
+  const [isPrivacyMode, setIsPrivacyMode] = useState(true);
+  const [uploadPreview, setUploadPreview] = useState<{ file: File, preview: string, date: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load photos on mount
+  useEffect(() => {
+      getPhotosFromDB().then(setPhotos).catch(console.error);
+  }, []);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+          setUploadPreview({
+              file,
+              preview: e.target?.result as string,
+              date: new Date().toISOString().split('T')[0]
+          });
+      };
+      reader.readAsDataURL(file);
+      // Reset input so same file can be selected again if cancelled
+      e.target.value = '';
+  };
+
+  const confirmPhotoUpload = async () => {
+      if (!uploadPreview) return;
+
+      try {
+          const compressedData = await compressImage(uploadPreview.file);
+          const newPhoto: BodyPhoto = {
+              id: Date.now().toString(),
+              date: uploadPreview.date,
+              timestamp: new Date(uploadPreview.date).getTime(),
+              imageData: compressedData
+          };
+          await savePhotoToDB(newPhoto);
+          setPhotos(prev => [newPhoto, ...prev].sort((a,b) => b.timestamp - a.timestamp));
+          setUploadPreview(null);
+      } catch (err) {
+          console.error("Failed to save photo", err);
+          alert("照片儲存失敗，請重試");
+      }
+  };
+
+  const handleDeletePhoto = async (id: string) => {
+      if(confirm('確定要刪除這張照片嗎？')) {
+          await deletePhotoFromDB(id);
+          setPhotos(prev => prev.filter(p => p.id !== id));
+          setShowPhotoModal({isOpen: false, photo: null});
+      }
+  };
 
   useEffect(() => {
       const savedWater = localStorage.getItem(`water_${todayStr}`);
@@ -190,20 +262,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
       let totalXP = 0;
       let totalWorkouts = historyLogs.length;
       let totalVolume = 0;
-      let morningWorkouts = 0;
-      let nightWorkouts = 0;
       
       historyLogs.forEach(log => {
           // 1 minute = 5 XP
           totalXP += log.duration * 5;
           // 1 completed workout = 100 XP
           totalXP += 100;
-          
-          // Check time for badges
-          const hour = new Date(log.date).getHours(); // Note: log.date is currently YYYY-MM-DD, strict time check needs timestamp. Assuming approximate for now or if timestamp available.
-          // Fallback if date string doesn't have time, random assignment for mock feels
-          // For a real app, log.date should be ISO string with time.
-          // Let's rely on basic heuristics if simple date.
           
           if (log.details) {
               log.details.forEach(ex => {
@@ -219,8 +283,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
           }
       });
 
-      // Level Calculation: Level N requires N*1000 XP (Linear-ish progression for demo)
-      // Or: Level = Math.floor(Math.sqrt(totalXP / 100))
+      // Level Calculation
       const level = Math.floor(Math.sqrt(totalXP / 50)) + 1;
       const prevLevelXp = 50 * Math.pow(level - 1, 2);
       const nextLevelXp = 50 * Math.pow(level, 2);
@@ -303,7 +366,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
         </div>
       </header>
 
-      {/* Gamification Card (New) */}
+      {/* Gamification Card */}
       <div className="bg-gradient-to-r from-charcoal-800 to-charcoal-900 border border-gray-700 rounded-3xl p-5 shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 p-8 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10"></div>
           
@@ -342,6 +405,50 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
                   )}
               </div>
           </div>
+      </div>
+
+      {/* Body Progress Gallery */}
+      <div className="bg-white dark:bg-charcoal-800 rounded-3xl p-5 shadow-sm border border-gray-100 dark:border-charcoal-700 overflow-hidden">
+          <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg flex items-center gap-2 text-gray-800 dark:text-white">
+                  <Camera size={20} className="text-pink-500"/> {t.bodyGallery}
+              </h3>
+              <div className="flex gap-2">
+                  <button onClick={() => setIsPrivacyMode(!isPrivacyMode)} className="p-2 bg-gray-100 dark:bg-charcoal-900 rounded-full text-gray-500 hover:text-charcoal-900 dark:hover:text-white">
+                      {isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                  <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 px-3 py-1.5 rounded-full text-xs font-bold shadow hover:opacity-90 transition-opacity">
+                      <Plus size={14}/> {t.addPhoto}
+                  </button>
+              </div>
+              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
+          </div>
+          
+          {photos.length > 0 ? (
+              <div className="flex gap-3 overflow-x-auto pb-4 snap-x">
+                  {photos.map(photo => (
+                      <div 
+                        key={photo.id} 
+                        onClick={() => setShowPhotoModal({isOpen: true, photo})}
+                        className="relative min-w-[100px] w-[100px] h-[140px] md:w-[120px] md:h-[160px] bg-gray-100 dark:bg-charcoal-900 rounded-xl overflow-hidden cursor-pointer snap-start border border-gray-200 dark:border-charcoal-700 group hover:border-neon-blue transition-colors"
+                      >
+                          <img 
+                            src={photo.imageData} 
+                            alt={photo.date} 
+                            className={`w-full h-full object-cover transition-all duration-500 ${isPrivacyMode ? 'blur-md group-hover:blur-sm' : ''}`} 
+                          />
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-1.5 text-center">
+                              <span className="text-[10px] text-white font-mono font-bold block">{photo.date}</span>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          ) : (
+              <div className="text-center py-8 bg-gray-50 dark:bg-charcoal-900/50 rounded-2xl border-dashed border-2 border-gray-200 dark:border-charcoal-700 text-gray-400">
+                  <ImageIcon className="mx-auto mb-2 opacity-30" size={32} />
+                  <p className="text-xs">{t.noPhotos}</p>
+              </div>
+          )}
       </div>
 
       {/* Main Stats Grid */}
@@ -498,6 +605,64 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
                       </div>
                       <button onClick={handleSaveWater} className="w-full bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2"><Save size={18}/> {t.save}</button>
                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* Upload Preview Modal */}
+      {uploadPreview && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6 flex flex-col gap-4">
+                  <div className="flex justify-between items-center">
+                      <h3 className="font-bold text-lg">{t.confirmUpload}</h3>
+                      <button onClick={() => setUploadPreview(null)} className="text-gray-500 hover:text-gray-800 dark:hover:text-white"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-charcoal-700 aspect-[3/4]">
+                      <img src={uploadPreview.preview} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+
+                  <div className="space-y-2">
+                      <label className="text-sm font-bold text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                          <Calendar size={16} /> {t.selectDate}
+                      </label>
+                      <input 
+                          type="date" 
+                          value={uploadPreview.date}
+                          onChange={(e) => setUploadPreview({...uploadPreview, date: e.target.value})}
+                          className="w-full p-3 rounded-xl bg-gray-100 dark:bg-charcoal-900 border border-gray-200 dark:border-charcoal-700 outline-none font-bold"
+                      />
+                  </div>
+
+                  <button 
+                      onClick={confirmPhotoUpload}
+                      className="w-full py-3 bg-cta-orange hover:bg-cta-hover text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-all"
+                  >
+                      {t.save}
+                  </button>
+              </div>
+          </div>
+      )}
+
+      {/* Photo Detail Modal */}
+      {showPhotoModal.isOpen && showPhotoModal.photo && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowPhotoModal({isOpen: false, photo: null})}>
+              <div className="relative max-w-full max-h-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                  <img src={showPhotoModal.photo.imageData} className="max-w-full max-h-[80vh] rounded-lg shadow-2xl" />
+                  <div className="flex items-center gap-4 mt-4">
+                      <div className="bg-charcoal-800 text-white px-4 py-2 rounded-full font-mono text-sm shadow-lg border border-charcoal-700">
+                          {showPhotoModal.photo.date}
+                      </div>
+                      <button 
+                        onClick={() => handleDeletePhoto(showPhotoModal.photo!.id)} 
+                        className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full shadow-lg transition-colors"
+                      >
+                          <Trash2 size={20} />
+                      </button>
+                  </div>
+                  <button onClick={() => setShowPhotoModal({isOpen: false, photo: null})} className="absolute -top-12 right-0 p-2 text-white hover:text-gray-300">
+                      <X size={32} />
+                  </button>
               </div>
           </div>
       )}

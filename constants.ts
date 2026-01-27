@@ -142,10 +142,14 @@ export const MOTIVATIONAL_QUOTES = [
   "今天的汗水是明天的微笑。"
 ];
 
-// --- HELPER: Generate Exquisite SVG Data URIs ---
-// This function generates blueprint-style technical illustrations
-const getTutorialImage = (type: 'MACHINE_UPPER' | 'MACHINE_LOWER' | 'DUMBBELL' | 'BODYWEIGHT' | 'BARBELL', highlight: string) => {
-    // Colors
+// --- HELPER: Generate IMPROVED SVG Data URIs with ANIMATIONS ---
+type PoseVariant = 'press_side' | 'press_front' | 'fly_front' | 'pull_back' | 'pull_side' | 'squat_side' | 'curl_side' | 'row_side' | 'hinge_side' | 'plank_side' | 'raise_front' | 'raise_side' | 'press_back';
+
+const getTutorialImage = (
+    type: 'MACHINE_UPPER' | 'MACHINE_LOWER' | 'DUMBBELL' | 'BODYWEIGHT' | 'BARBELL', 
+    highlight: string,
+    variant: PoseVariant = 'press_side'
+) => {
     const colors: Record<string, string> = {
         '胸部': '#f97316', '背部': '#c084fc', '腿部': '#a3e635', 
         '肩膀': '#22d3ee', '手臂': '#facc15', '核心': '#f87171', '有氧': '#2dd4bf',
@@ -153,7 +157,6 @@ const getTutorialImage = (type: 'MACHINE_UPPER' | 'MACHINE_LOWER' | 'DUMBBELL' |
     };
     const accent = colors[highlight] || colors['DEFAULT'];
     
-    // Background Pattern
     const bg = `<rect width="100%" height="100%" fill="#f8fafc"/>
                 <path d="M0 0 L400 300 M400 0 L0 300" stroke="#e2e8f0" stroke-width="0.5" />
                 <rect x="0" y="0" width="400" height="300" fill="url(#grid)" />`;
@@ -162,113 +165,222 @@ const getTutorialImage = (type: 'MACHINE_UPPER' | 'MACHINE_LOWER' | 'DUMBBELL' |
                     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
                         <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e2e8f0" stroke-width="1"/>
                     </pattern>
+                    <marker id="arrowHead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+                    </marker>
                     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                      <feGaussianBlur stdDeviation="3" result="blur" />
+                      <feGaussianBlur stdDeviation="4" result="blur" />
                       <feComposite in="SourceGraphic" in2="blur" operator="over" />
                     </filter>
                   </defs>`;
 
+    const bodyColor = "#334155";
+    const propColor = "#94a3b8"; 
+    const weightColor = "#1e293b"; 
+
+    // Smooth animation attributes
+    const anim = (dur = "2s") => `dur="${dur}" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines="0.4 0 0.2 1; 0.4 0 0.2 1"`;
+
+    // Static Parts
+    const headFront = `<circle cx="200" cy="70" r="18" fill="${bodyColor}" />`;
+    const torsoFront = `<path d="M180 90 L220 90 L210 180 L190 180 Z" stroke="${bodyColor}" stroke-width="32" stroke-linejoin="round" />`;
+    const torsoBack = `<path d="M170 90 L230 90 L210 180 L190 180 Z" stroke="${bodyColor}" stroke-width="32" stroke-linejoin="round" />`;
+    const headSide = `<circle cx="160" cy="80" r="18" fill="${bodyColor}" />`;
+    const torsoSideVertical = `<path d="M160 95 L160 180" stroke="${bodyColor}" stroke-width="32" stroke-linecap="round" />`;
+    const legsFrontSitting = `<path d="M190 180 L170 240" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" /><path d="M210 180 L230 240" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" />`;
+    const legsFrontStanding = `<path d="M190 180 L185 260" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" /><path d="M210 180 L215 260" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" />`;
+    const legsSideSitting = `<path d="M160 180 L220 185" stroke="${bodyColor}" stroke-width="24" stroke-linecap="round" /><path d="M220 185 L225 250" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" />`;
+    const legsSideStanding = `<path d="M160 180 L160 260" stroke="${bodyColor}" stroke-width="22" stroke-linecap="round" />`;
+    const torsoLying = `<path d="M150 210 L250 210" stroke="${bodyColor}" stroke-width="35" stroke-linecap="round" />`;
+    const legsLying = `<path d="M250 210 L280 230" stroke="${bodyColor}" stroke-width="25" stroke-linecap="round" /><path d="M280 230 L280 280" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" />`;
+
     let content = '';
 
-    // Dummy Model Definitions (Simplified Technical Drawing Style)
-    const head = `<circle cx="200" cy="80" r="20" fill="#334155" />`;
-    const torso = `<path d="M200 100 L200 200" stroke="#334155" stroke-width="35" stroke-linecap="round" />`;
-    const armL = `<path d="M185 110 L150 150" stroke="#334155" stroke-width="18" stroke-linecap="round" />`;
-    const armR = `<path d="M215 110 L250 150" stroke="#334155" stroke-width="18" stroke-linecap="round" />`;
-    const legL = `<path d="M190 200 L170 270" stroke="#334155" stroke-width="20" stroke-linecap="round" />`;
-    const legR = `<path d="M210 200 L230 270" stroke="#334155" stroke-width="20" stroke-linecap="round" />`;
+    switch (variant) {
+        case 'press_front': // Shoulder Press
+            content = `
+                ${headFront} ${torsoFront} ${type.includes('MACHINE') ? `<rect x="150" y="200" width="100" height="10" fill="${propColor}" />` : legsFrontSitting}
+                <g>
+                    <!-- Moving Arms Group -->
+                    <animateTransform attributeName="transform" type="translate" values="0,0; 0,-40; 0,0" ${anim('2s')} />
+                    <path d="M180 100 L150 100 L150 50" stroke="${bodyColor}" stroke-width="15" fill="none" stroke-linecap="round" />
+                    <path d="M220 100 L250 100 L250 50" stroke="${bodyColor}" stroke-width="15" fill="none" stroke-linecap="round" />
+                    ${type === 'DUMBBELL' ? `
+                        <rect x="130" y="40" width="40" height="10" rx="2" fill="${weightColor}" />
+                        <rect x="230" y="40" width="40" height="10" rx="2" fill="${weightColor}" />
+                    ` : `<line x1="100" y1="50" x2="300" y2="50" stroke="${propColor}" stroke-width="8" />`}
+                </g>
+                <circle cx="170" cy="95" r="10" fill="${accent}" filter="url(#glow)" opacity="0.7"><animate attributeName="opacity" values="0.7;0.3;0.7" dur="2s" repeatCount="indefinite" /></circle>
+                <circle cx="230" cy="95" r="10" fill="${accent}" filter="url(#glow)" opacity="0.7"><animate attributeName="opacity" values="0.7;0.3;0.7" dur="2s" repeatCount="indefinite" /></circle>
+                <path d="M150 80 L150 30" stroke="#ef4444" stroke-width="4" marker-end="url(#arrowHead)" opacity="0.5" />
+            `;
+            break;
 
-    if (type === 'MACHINE_UPPER') {
-        // Seated Machine Press
-        content = `
-            <!-- Seat -->
-            <path d="M160 220 L240 220 L240 180" stroke="#94a3b8" stroke-width="6" fill="none"/>
-            <rect x="180" y="160" width="40" height="100" rx="5" fill="#cbd5e1" opacity="0.5" />
-            <!-- Machine Arm -->
-            <path d="M100 280 L100 50 L300 50 L300 280" stroke="#e2e8f0" stroke-width="8" fill="none" stroke-linecap="round"/>
-            <!-- Handles -->
-            <path d="M120 140 L160 140" stroke="#64748b" stroke-width="8" stroke-linecap="round"/>
-            <path d="M240 140 L280 140" stroke="#64748b" stroke-width="8" stroke-linecap="round"/>
-            <!-- Dummy Seated -->
-            ${head.replace('80', '100')}
-            ${torso.replace('100', '120').replace('200', '220')}
-            <path d="M185 130 L140 140" stroke="#334155" stroke-width="18" stroke-linecap="round" />
-            <path d="M215 130 L260 140" stroke="#334155" stroke-width="18" stroke-linecap="round" />
-            <!-- Highlight -->
-            <circle cx="200" cy="140" r="15" fill="${accent}" opacity="0.6" filter="url(#glow)">
-               <animate attributeName="opacity" values="0.6;0.3;0.6" dur="2s" repeatCount="indefinite" />
-            </circle>
-            <text x="380" y="280" text-anchor="end" fill="#94a3b8" font-size="10" font-family="monospace">TECH: MACHINE</text>
-        `;
-    } else if (type === 'MACHINE_LOWER') {
-        // Leg Press / Extension
-        content = `
-            <!-- Seat Reclined -->
-            <path d="M120 200 L180 200 L180 140" stroke="#94a3b8" stroke-width="6" fill="none"/>
-            <rect x="110" y="190" width="80" height="10" rx="2" fill="#cbd5e1" />
-            <!-- Foot Plate / Pad -->
-            <rect x="260" y="150" width="10" height="80" rx="2" fill="#64748b" />
-            <line x1="180" y1="200" x2="260" y2="190" stroke="#e2e8f0" stroke-width="4" stroke-dasharray="5,5"/>
-            <!-- Dummy Seated -->
-            <circle cx="150" cy="130" r="20" fill="#334155" />
-            <path d="M150 150 L150 200" stroke="#334155" stroke-width="35" stroke-linecap="round" />
-            <path d="M150 200 L200 190" stroke="#334155" stroke-width="25" stroke-linecap="round" />
-            <path d="M200 190 L260 170" stroke="#334155" stroke-width="20" stroke-linecap="round" />
-            <!-- Highlight -->
-            <ellipse cx="180" cy="190" rx="20" ry="10" fill="${accent}" opacity="0.6" filter="url(#glow)" />
-            <text x="380" y="280" text-anchor="end" fill="#94a3b8" font-size="10" font-family="monospace">TECH: LEG PRESS</text>
-        `;
-    } else if (type === 'DUMBBELL') {
-        // Standing with DB
-        content = `
-            ${head} ${torso} ${legL} ${legR}
-            <!-- Arms holding DB -->
-            <path d="M185 110 L160 160" stroke="#334155" stroke-width="18" stroke-linecap="round" />
-            <path d="M215 110 L240 160" stroke="#334155" stroke-width="18" stroke-linecap="round" />
-            <!-- Dumbbells -->
-            <rect x="145" y="150" width="30" height="10" rx="2" fill="#475569" />
-            <rect x="225" y="150" width="30" height="10" rx="2" fill="#475569" />
-            <!-- Highlight -->
-            <circle cx="200" cy="110" r="20" fill="${accent}" opacity="0.5" filter="url(#glow)" />
-            <text x="380" y="280" text-anchor="end" fill="#94a3b8" font-size="10" font-family="monospace">TECH: FREE WEIGHT</text>
-        `;
-    } else if (type === 'BARBELL') {
-         // Bench Press / Squat generic
-         content = `
-            <!-- Bench -->
-            <rect x="100" y="200" width="200" height="10" fill="#cbd5e1" />
-            <rect x="120" y="210" width="10" height="40" fill="#94a3b8" />
-            <rect x="270" y="210" width="10" height="40" fill="#94a3b8" />
-            <!-- Dummy Lying -->
-            <circle cx="130" cy="190" r="18" fill="#334155" />
-            <path d="M150 195 L250 195" stroke="#334155" stroke-width="30" stroke-linecap="round" />
-            <!-- Arms Up -->
-            <path d="M180 190 L180 150" stroke="#334155" stroke-width="15" stroke-linecap="round" />
-            <path d="M220 190 L220 150" stroke="#334155" stroke-width="15" stroke-linecap="round" />
-            <!-- Barbell -->
-            <line x1="140" y1="150" x2="260" y2="150" stroke="#1e293b" stroke-width="6" />
-            <rect x="140" y="140" width="5" height="20" fill="#1e293b" />
-            <rect x="255" y="140" width="5" height="20" fill="#1e293b" />
-            <!-- Highlight -->
-            <ellipse cx="200" cy="190" rx="30" ry="10" fill="${accent}" opacity="0.6" filter="url(#glow)" />
-            <text x="380" y="280" text-anchor="end" fill="#94a3b8" font-size="10" font-family="monospace">TECH: BARBELL</text>
-         `;
-    } else {
-        // Bodyweight (Plank/Pushup)
-        content = `
-            <!-- Mat -->
-            <rect x="50" y="260" width="300" height="4" rx="2" fill="#cbd5e1" />
-            <!-- Dummy Plank pos -->
-            <path d="M100 240 L280 200" stroke="#334155" stroke-width="30" stroke-linecap="round" />
-            <circle cx="290" cy="190" r="18" fill="#334155" />
-            <!-- Arms -->
-            <line x1="260" y1="205" x2="260" y2="260" stroke="#334155" stroke-width="15" stroke-linecap="round" />
-            <!-- Feet -->
-            <path d="M100 240 L80 260" stroke="#334155" stroke-width="15" stroke-linecap="round" />
-            <!-- Highlight -->
-            <rect x="150" y="210" width="100" height="20" fill="${accent}" opacity="0.6" transform="rotate(-12 200 220)" filter="url(#glow)" />
-            <text x="380" y="280" text-anchor="end" fill="#94a3b8" font-size="10" font-family="monospace">TECH: CALISTHENICS</text>
-        `;
+        case 'fly_front': // Lateral Raise
+            content = `
+                ${headFront} ${torsoFront} ${legsFrontStanding}
+                <!-- Left Arm -->
+                <g transform="rotate(0 180 100)">
+                    <animateTransform attributeName="transform" type="rotate" values="0 180 100; -80 180 100; 0 180 100" ${anim('2.5s')} />
+                    <path d="M180 100 L120 110" stroke="${bodyColor}" stroke-width="14" stroke-linecap="round" />
+                    <circle cx="115" cy="115" r="8" fill="${weightColor}" />
+                </g>
+                <!-- Right Arm -->
+                <g transform="rotate(0 220 100)">
+                    <animateTransform attributeName="transform" type="rotate" values="0 220 100; 80 220 100; 0 220 100" ${anim('2.5s')} />
+                    <path d="M220 100 L280 110" stroke="${bodyColor}" stroke-width="14" stroke-linecap="round" />
+                    <circle cx="285" cy="115" r="8" fill="${weightColor}" />
+                </g>
+                <circle cx="170" cy="100" r="10" fill="${accent}" filter="url(#glow)" opacity="0.7"/>
+                <circle cx="230" cy="100" r="10" fill="${accent}" filter="url(#glow)" opacity="0.7"/>
+            `;
+            break;
+
+        case 'pull_back': // Lat Pulldown / Pull Up
+            content = `
+                ${headFront} ${torsoBack} ${type.includes('MACHINE') ? `<rect x="160" y="200" width="80" height="10" fill="${propColor}" />` : legsFrontStanding}
+                <g>
+                    <!-- Pulling Motion -->
+                    <animateTransform attributeName="transform" type="translate" values="0,0; 0,50; 0,0" ${anim('2.5s')} />
+                    <path d="M170 100 L130 50" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" />
+                    <path d="M230 100 L270 50" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" />
+                    <line x1="100" y1="50" x2="300" y2="50" stroke="${propColor}" stroke-width="8" stroke-linecap="round" />
+                    ${type.includes('MACHINE') ? `<line x1="200" y1="50" x2="200" y2="0" stroke="#1e293b" stroke-width="4" />` : ''}
+                </g>
+                <path d="M180 120 L200 160 L220 120 Z" fill="${accent}" filter="url(#glow)" opacity="0.6"><animate attributeName="opacity" values="0.4;0.8;0.4" dur="2.5s" repeatCount="indefinite" /></path>
+                <path d="M130 40 L130 100" stroke="#ef4444" stroke-width="4" marker-end="url(#arrowHead)" opacity="0.5" />
+            `;
+            break;
+
+        case 'press_side': // Bench / Machine Press
+            if (type === 'DUMBBELL' || type === 'BARBELL' || type === 'BODYWEIGHT') {
+                if (type === 'BODYWEIGHT') { // Push Up
+                     content = `
+                        <rect x="50" y="260" width="300" height="4" rx="2" fill="${propColor}" />
+                        <g>
+                             <!-- Pivot at feet (100, 240 approx) -->
+                             <animateTransform attributeName="transform" type="rotate" values="0 90 260; -15 90 260; 0 90 260" ${anim('2s')} />
+                             <path d="M100 240 L250 200" stroke="${bodyColor}" stroke-width="35" stroke-linecap="round" />
+                             <circle cx="260" cy="190" r="18" fill="${bodyColor}" />
+                             <path d="M240 205 L240 260" stroke="${bodyColor}" stroke-width="15" stroke-linecap="round" /> <!-- Arm -->
+                             <path d="M100 240 L90 260" stroke="${bodyColor}" stroke-width="15" stroke-linecap="round" />
+                             <rect x="150" y="210" width="80" height="20" fill="${accent}" opacity="0.6" transform="rotate(-15 190 220)" filter="url(#glow)" />
+                        </g>
+                     `;
+                } else { // Bench Press
+                    content = `
+                        <rect x="100" y="220" width="200" height="15" rx="5" fill="${propColor}" />
+                        <rect x="120" y="235" width="10" height="30" fill="${propColor}" />
+                        <rect x="270" y="235" width="10" height="30" fill="${propColor}" />
+                        <circle cx="130" cy="200" r="18" fill="${bodyColor}" />
+                        ${torsoLying} ${legsLying}
+                        <g>
+                            <animateTransform attributeName="transform" type="translate" values="0,0; 0,-50; 0,0" ${anim('2s')} />
+                            <path d="M170 200 L170 130" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" />
+                            ${type === 'DUMBBELL' ? 
+                                `<rect x="150" y="120" width="40" height="10" rx="2" fill="${weightColor}" />` : 
+                                `<line x1="140" y1="130" x2="200" y2="130" stroke="${weightColor}" stroke-width="6" />`
+                            }
+                        </g>
+                        <ellipse cx="170" cy="200" rx="15" ry="10" fill="${accent}" filter="url(#glow)" opacity="0.7" />
+                    `;
+                }
+            } else { // Machine Press
+                content = `
+                    <path d="M130 80 L120 200 L110 260" stroke="${propColor}" stroke-width="12" stroke-linecap="round" fill="none" />
+                    <rect x="125" y="180" width="100" height="10" rx="2" fill="${propColor}" />
+                    ${legsSideSitting} 
+                    <path d="M160 95 L150 180" stroke="${bodyColor}" stroke-width="32" stroke-linecap="round" />
+                    ${headSide}
+                    <g>
+                        <animateTransform attributeName="transform" type="translate" values="0,0; 40,0; 0,0" ${anim('2s')} />
+                        <path d="M160 100 L220 100" stroke="${bodyColor}" stroke-width="18" stroke-linecap="round" />
+                        <rect x="210" y="90" width="10" height="20" rx="3" fill="#64748b" />
+                        <line x1="215" y1="100" x2="280" y2="150" stroke="${propColor}" stroke-width="6" />
+                    </g>
+                    <circle cx="170" cy="105" r="12" fill="${accent}" filter="url(#glow)" opacity="0.7"/>
+                `;
+            }
+            break;
+
+        case 'row_side': // Row
+            content = `
+                ${type === 'MACHINE_UPPER' ? 
+                    `<rect x="80" y="180" width="80" height="10" fill="${propColor}" /> ${legsSideSitting} ${torsoSideVertical} ${headSide} 
+                     <g>
+                        <animateTransform attributeName="transform" type="translate" values="0,0; -30,0; 0,0" ${anim('2s')} />
+                        <path d="M160 110 L220 110" stroke="${bodyColor}" stroke-width="16" stroke-linecap="round" /> 
+                        <line x1="220" y1="110" x2="350" y2="110" stroke="${propColor}" stroke-width="4" />
+                     </g>` 
+                    : 
+                    // DB Bent Over Row
+                    `${legsSideStanding} 
+                     <path d="M160 170 L210 120" stroke="${bodyColor}" stroke-width="32" stroke-linecap="round" />
+                     <circle cx="160" cy="160" r="18" fill="${bodyColor}" />
+                     <g>
+                        <animateTransform attributeName="transform" type="translate" values="0,0; 0,-30; 0,0" ${anim('2s')} />
+                        <path d="M180 140 L180 200" stroke="${bodyColor}" stroke-width="16" stroke-linecap="round" />
+                        <rect x="160" y="200" width="40" height="10" rx="2" fill="${weightColor}" />
+                     </g>`
+                }
+                <ellipse cx="150" cy="${type === 'MACHINE_UPPER' ? 120 : 150}" rx="15" ry="20" fill="${accent}" filter="url(#glow)" opacity="0.6" />
+            `;
+            break;
+
+        case 'squat_side': // Squat / Leg Press
+            if (type === 'MACHINE_LOWER') {
+                content = `
+                    <path d="M80 180 L140 220" stroke="${propColor}" stroke-width="15" stroke-linecap="round" />
+                    <path d="M80 180 L60 100" stroke="${propColor}" stroke-width="15" stroke-linecap="round" />
+                    <circle cx="80" cy="90" r="18" fill="${bodyColor}" />
+                    <path d="M80 110 L120 200" stroke="${bodyColor}" stroke-width="35" stroke-linecap="round" />
+                    <g>
+                        <!-- Leg Push Animation -->
+                        <animate attributeName="d" values="M120 200 L180 150 L240 150; M120 200 L190 180 L260 180; M120 200 L180 150 L240 150" ${anim('3s')} />
+                        <path d="M120 200 L180 150 L240 150" stroke="${bodyColor}" stroke-width="22" stroke-linecap="round" fill="none" />
+                    </g>
+                    <g>
+                         <animateTransform attributeName="transform" type="translate" values="0,0; 20,30; 0,0" ${anim('3s')} />
+                         <rect x="245" y="100" width="10" height="100" rx="2" fill="#64748b" />
+                    </g>
+                    <ellipse cx="150" cy="175" rx="20" ry="10" fill="${accent}" opacity="0.6" filter="url(#glow)" transform="rotate(-30 150 175)" />
+                `;
+            } else { // Squat
+                content = `
+                    <g>
+                        <!-- Squat Motion: Head & Torso move Down -->
+                        <animateTransform attributeName="transform" type="translate" values="0,0; 0,40; 0,0" ${anim('3s')} />
+                        ${headSide} ${torsoSideVertical}
+                        ${type === 'BARBELL' ? `<circle cx="155" cy="95" r="8" fill="${weightColor}" />` : ''}
+                    </g>
+                    <!-- Legs Morph -->
+                    <path stroke="${bodyColor}" stroke-width="24" stroke-linejoin="round" fill="none">
+                        <animate attributeName="d" values="M160 180 L160 220 L160 260; M160 180 L200 220 L160 260; M160 180 L160 220 L160 260" ${anim('3s')} />
+                    </path>
+                    <ellipse cx="180" cy="200" rx="15" ry="25" fill="${accent}" opacity="0.6" filter="url(#glow)" />
+                `;
+            }
+            break;
+
+        case 'curl_side': // Curl
+            content = `
+                ${legsSideStanding} ${torsoSideVertical} ${headSide}
+                <g transform="translate(160,140)"> <!-- Pivot at Elbow -->
+                     <animateTransform attributeName="transform" type="rotate" values="0; -100; 0" additive="sum" ${anim('2.5s')} />
+                     <path d="M0 0 L40 -20" stroke="${bodyColor}" stroke-width="16" stroke-linecap="round" />
+                     <rect x="30" y="-30" width="10" height="20" rx="2" fill="${weightColor}" transform="rotate(-30 40 -20)" />
+                </g>
+                <path d="M160 100 L160 140" stroke="${bodyColor}" stroke-width="16" stroke-linecap="round" /> <!-- Upper Arm Fixed -->
+                <circle cx="160" cy="120" r="12" fill="${accent}" filter="url(#glow)" opacity="0.7" />
+            `;
+            break;
+
+        default: 
+            content = `
+                ${legsSideStanding} ${torsoSideVertical} ${headSide}
+                <text x="380" y="280" text-anchor="end" fill="#94a3b8" font-size="12" font-weight="bold">GENERIC</text>
+            `;
+            break;
     }
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
@@ -292,7 +404,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '主要訓練胸大肌、前三角肌、三頭肌。軌跡固定，適合新手學習發力。',
     tips: ['座椅調整讓把手在胸線高度', '推到手臂微彎勿鎖死', '肩胛骨後收貼緊椅背', '離心下放要慢'],
     animationType: 'push',
-    image: getTutorialImage('MACHINE_UPPER', '胸部')
+    image: getTutorialImage('MACHINE_UPPER', '胸部', 'press_side')
   },
   {
     id: 'm2',
@@ -304,7 +416,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '訓練三角肌（前中束）、三頭肌。提供穩定的過頭推舉動作。',
     tips: ['背部貼緊，勿聳肩', '推到頂端手臂微彎', '手肘略微向前，不要完全打開', '核心收緊避免腰椎過度反折'],
     animationType: 'push',
-    image: getTutorialImage('MACHINE_UPPER', '肩膀')
+    image: getTutorialImage('MACHINE_UPPER', '肩膀', 'press_front')
   },
   {
     id: 'm3',
@@ -316,7 +428,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '針對胸大肌（特別是內側）的孤立訓練動作。',
     tips: ['手臂微彎，像抱大樹', '勿過度拉開肩關節以免受傷', '合攏時擠壓胸肌停頓一秒', '身體保持穩定不晃動'],
     animationType: 'push',
-    image: getTutorialImage('MACHINE_UPPER', '胸部')
+    image: getTutorialImage('MACHINE_UPPER', '胸部', 'fly_front')
   },
   {
     id: 'm4',
@@ -328,7 +440,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '訓練背闊肌、菱形肌、斜方中下、二頭肌。增加背部厚度。',
     tips: ['胸挺、肩下沉', '拉到肚臍附近', '勿用手臂猛拉，用手肘帶動', '回放時感受背肌拉伸'],
     animationType: 'pull',
-    image: getTutorialImage('MACHINE_UPPER', '背部')
+    image: getTutorialImage('MACHINE_UPPER', '背部', 'row_side')
   },
   {
     id: 'm5',
@@ -340,7 +452,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '訓練背闊肌、二頭肌。增加背部寬度的首選動作。',
     tips: ['寬握或窄握皆可，保持肩下沉', '拉到上胸位置', '身體勿過度後仰', '頂端稍微停頓擠壓'],
     animationType: 'pull',
-    image: getTutorialImage('MACHINE_UPPER', '背部')
+    image: getTutorialImage('MACHINE_UPPER', '背部', 'pull_back')
   },
   {
     id: 'm6',
@@ -352,7 +464,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '訓練股四頭肌、臀大肌。比深蹲對腰椎壓力小，可安全上大重量。',
     tips: ['腳放高位偏臀，放低位偏股四', '膝蓋推直時勿鎖死', '背部與臀部緊貼椅背', '膝蓋對齊腳尖方向'],
     animationType: 'leg',
-    image: getTutorialImage('MACHINE_LOWER', '腿部')
+    image: getTutorialImage('MACHINE_LOWER', '腿部', 'squat_side')
   },
   {
     id: 'm7',
@@ -364,7 +476,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '孤立訓練股四頭肌。',
     tips: ['慢放控制離心', '頂端擠壓1秒', '勿用慣性甩動', '椅背調整至膝蓋對準軸心'],
     animationType: 'leg',
-    image: getTutorialImage('MACHINE_LOWER', '腿部')
+    image: getTutorialImage('MACHINE_LOWER', '腿部', 'curl_side')
   },
   {
     id: 'm8',
@@ -376,7 +488,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '訓練腿後肌群（膕繩肌）。',
     tips: ['腳踝墊緊靠', '慢控制放下', '頂端盡量靠近臀部', '保持骨盆穩定不抬起'],
     animationType: 'leg',
-    image: getTutorialImage('MACHINE_LOWER', '腿部')
+    image: getTutorialImage('MACHINE_LOWER', '腿部', 'curl_side')
   },
   {
     id: 'm9',
@@ -388,7 +500,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '外展練臀中肌/小肌；內收練大腿內側肌群。',
     tips: ['核心收緊', '慢慢推開/夾緊', '控制回程速度', '背部貼緊椅背'],
     animationType: 'leg',
-    image: getTutorialImage('MACHINE_LOWER', '腿部')
+    image: getTutorialImage('MACHINE_LOWER', '腿部', 'fly_front')
   },
   {
     id: 'm10',
@@ -400,7 +512,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '軌道固定的槓鈴，適合深蹲、臥推、肩推等多種動作。',
     tips: ['適合新手熟悉軌跡', '注意腳的位置與身體重心', '安全扣環要會使用', '勿過度依賴軌道'],
     animationType: 'leg',
-    image: getTutorialImage('MACHINE_UPPER', '腿部')
+    image: getTutorialImage('MACHINE_UPPER', '腿部', 'squat_side')
   },
   // --- 啞鈴 (Dumbbells) ---
   {
@@ -413,7 +525,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '胸大肌、三頭、前三角。比槓鈴活動範圍更大，可改善左右不平衡。',
     tips: ['肩胛收緊下沉', '啞鈴路線呈微弧形', '下放到胸側拉伸', '推起時勿鎖死肘關節'],
     animationType: 'push',
-    image: getTutorialImage('DUMBBELL', '胸部')
+    image: getTutorialImage('DUMBBELL', '胸部', 'press_side')
   },
   {
     id: 'd2',
@@ -425,7 +537,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '針對上胸、三角肌前束。',
     tips: ['斜板調整約30-45度', '下放時感覺上胸拉伸', '手肘與身體呈45度夾角', '核心收緊'],
     animationType: 'push',
-    image: getTutorialImage('DUMBBELL', '胸部')
+    image: getTutorialImage('DUMBBELL', '胸部', 'press_side')
   },
   {
     id: 'd3',
@@ -437,7 +549,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '胸大肌孤立動作，強調拉伸感。',
     tips: ['手臂微彎固定角度', '像抱大樹一樣開合', '勿下放過低以免傷肩', '專注胸肌收縮'],
     animationType: 'push',
-    image: getTutorialImage('DUMBBELL', '胸部')
+    image: getTutorialImage('DUMBBELL', '胸部', 'fly_front')
   },
   {
     id: 'd4',
@@ -449,7 +561,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '背闊肌、菱形肌、二頭。單邊訓練效果好。',
     tips: ['一手膝蓋撐椅，背保持平行地面', '拉到髖側（口袋位置）', '肩胛先啟動擠壓', '勿過度扭轉軀幹'],
     animationType: 'pull',
-    image: getTutorialImage('DUMBBELL', '背部')
+    image: getTutorialImage('DUMBBELL', '背部', 'row_side')
   },
   {
     id: 'd5',
@@ -461,7 +573,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '後三角肌、菱形肌。改善圓肩。',
     tips: ['身體前傾接近平行', '微彎肘，像張開翅膀', '專注後肩發力', '不要聳肩'],
     animationType: 'pull',
-    image: getTutorialImage('DUMBBELL', '肩膀')
+    image: getTutorialImage('DUMBBELL', '肩膀', 'fly_front')
   },
   {
     id: 'd6',
@@ -473,7 +585,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '三角肌前中束、三頭。建立寬肩。',
     tips: ['核心收緊，背貼椅背', '勿過度後仰', '推到頂端啞鈴可輕碰', '手肘不要完全外展90度'],
     animationType: 'push',
-    image: getTutorialImage('DUMBBELL', '肩膀')
+    image: getTutorialImage('DUMBBELL', '肩膀', 'press_front')
   },
   {
     id: 'd7',
@@ -485,7 +597,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '三角肌中束。增加肩膀視覺寬度。',
     tips: ['微彎肘', '像倒水一樣抬起手肘', '勿用衝力甩動', '頂端停留1秒'],
     animationType: 'pull',
-    image: getTutorialImage('DUMBBELL', '肩膀')
+    image: getTutorialImage('DUMBBELL', '肩膀', 'fly_front')
   },
   {
     id: 'd8',
@@ -497,7 +609,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '三角肌前束。',
     tips: ['可交替或同時舉起', '勿舉過高超過肩膀太多', '保持身體穩定不晃動', '大拇指朝上或手掌朝下皆可'],
     animationType: 'pull',
-    image: getTutorialImage('DUMBBELL', '肩膀')
+    image: getTutorialImage('DUMBBELL', '肩膀', 'curl_side')
   },
   {
     id: 'd9',
@@ -509,7 +621,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '二頭肌基礎動作。',
     tips: ['大臂夾緊身體', '勿前後晃動借力', '頂端旋轉手腕擠壓二頭', '離心下放要慢'],
     animationType: 'pull',
-    image: getTutorialImage('DUMBBELL', '手臂')
+    image: getTutorialImage('DUMBBELL', '手臂', 'curl_side')
   },
   {
     id: 'd10',
@@ -521,7 +633,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '二頭肌、肱肌、前臂。',
     tips: ['掌心相對像拿錘子', '大臂固定不動', '對前臂線條很有幫助', '避免聳肩'],
     animationType: 'pull',
-    image: getTutorialImage('DUMBBELL', '手臂')
+    image: getTutorialImage('DUMBBELL', '手臂', 'curl_side')
   },
   {
     id: 'd11',
@@ -533,7 +645,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '三頭肌（長頭）。',
     tips: ['雙手或單手持鈴', '大臂盡量貼近頭部', '核心收緊勿腰椎反折', '手肘指向天花板'],
     animationType: 'push',
-    image: getTutorialImage('DUMBBELL', '手臂')
+    image: getTutorialImage('DUMBBELL', '手臂', 'press_front')
   },
   {
     id: 'd12',
@@ -545,7 +657,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '三頭肌強力動作。',
     tips: ['平躺，啞鈴下放至耳旁或額頭', '大臂保持垂直或微向後', '手肘固定位置', '推起時擠壓三頭'],
     animationType: 'push',
-    image: getTutorialImage('DUMBBELL', '手臂')
+    image: getTutorialImage('DUMBBELL', '手臂', 'press_side')
   },
   {
     id: 'd13',
@@ -557,7 +669,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '股四頭、臀大肌、核心。適合學習深蹲姿勢。',
     tips: ['啞鈴垂直抱在胸前', '肘部向下', '蹲到大腿平行或更低', '膝蓋對齊腳尖'],
     animationType: 'leg',
-    image: getTutorialImage('DUMBBELL', '腿部')
+    image: getTutorialImage('DUMBBELL', '腿部', 'squat_side')
   },
   {
     id: 'd14',
@@ -569,7 +681,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '腿後肌、臀大肌、下背。',
     tips: ['微彎膝固定角度', '臀部向後推', '啞鈴貼著腿部移動', '背部始終保持平直'],
     animationType: 'leg',
-    image: getTutorialImage('DUMBBELL', '腿部')
+    image: getTutorialImage('DUMBBELL', '腿部', 'row_side')
   },
   {
     id: 'd15',
@@ -581,7 +693,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '單腿蹲之王。股四頭、臀大肌。',
     tips: ['後腳放椅上', '前腳蹲到大腿平行', '上身直立偏股四', '前傾偏臀', '保持平衡'],
     animationType: 'leg',
-    image: getTutorialImage('DUMBBELL', '腿部')
+    image: getTutorialImage('DUMBBELL', '腿部', 'squat_side')
   },
   {
     id: 'd16',
@@ -593,7 +705,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '股四頭、臀大肌、腿後。功能性強。',
     tips: ['跨步距離適中', '後膝接近地面但不碰地', '前膝勿內扣', '軀幹保持正直'],
     animationType: 'leg',
-    image: getTutorialImage('DUMBBELL', '腿部')
+    image: getTutorialImage('DUMBBELL', '腿部', 'squat_side')
   },
   {
     id: 'd17',
@@ -605,7 +717,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '腹斜肌、核心穩定。',
     tips: ['坐姿，軀幹後傾45度', '雙腳離地或著地', '轉動肩膀而非只是手臂', '保持呼吸'],
     animationType: 'core',
-    image: getTutorialImage('DUMBBELL', '核心')
+    image: getTutorialImage('DUMBBELL', '核心', 'press_front')
   },
   {
     id: 'd18',
@@ -617,7 +729,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '腹斜肌。',
     tips: ['單手持鈴', '另一手放頭後或插腰', '側彎時勿前傾或後仰', '感受側腹拉伸與收縮'],
     animationType: 'core',
-    image: getTutorialImage('DUMBBELL', '核心')
+    image: getTutorialImage('DUMBBELL', '核心', 'fly_front')
   },
   // --- 徒手訓練 (Bodyweight) ---
   {
@@ -630,7 +742,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '最經典的徒手推力動作，訓練胸大肌、三角肌前束與三頭肌。',
     tips: ['核心收緊，身體呈一直線', '手肘與身體呈45度夾角', '下放直到胸口接近地面', '推起時肩胛骨前引'],
     animationType: 'push',
-    image: getTutorialImage('BODYWEIGHT', '胸部')
+    image: getTutorialImage('BODYWEIGHT', '胸部', 'press_side')
   },
   {
     id: 'c2',
@@ -642,7 +754,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '雙手食指與拇指靠攏成鑽石狀，重點刺激三頭肌。',
     tips: ['手掌置於胸口正下方', '手肘貼近身體', '核心保持穩定', '感受三頭肌發力'],
     animationType: 'push',
-    image: getTutorialImage('BODYWEIGHT', '手臂')
+    image: getTutorialImage('BODYWEIGHT', '手臂', 'press_side')
   },
   {
     id: 'c3',
@@ -654,7 +766,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '被稱為「上半身的深蹲」，強烈刺激胸肌下緣與三頭肌。',
     tips: ['身體前傾側重胸肌，直立側重三頭', '下放至手肘90度', '肩膀下沉勿聳肩', '雙腳可交叉後勾'],
     animationType: 'push',
-    image: getTutorialImage('BODYWEIGHT', '胸部')
+    image: getTutorialImage('BODYWEIGHT', '胸部', 'press_side')
   },
   {
     id: 'c4',
@@ -666,7 +778,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '模擬肩推的徒手動作，身體呈倒V字型。',
     tips: ['臀部抬高，身體呈倒V', '頭部頂端朝地面落下', '手肘向後收而非向外開', '推起時讓頭部穿過手臂'],
     animationType: 'push',
-    image: getTutorialImage('BODYWEIGHT', '肩膀')
+    image: getTutorialImage('BODYWEIGHT', '肩膀', 'press_side')
   },
   {
     id: 'c5',
@@ -678,7 +790,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '居家三頭肌訓練好動作。',
     tips: ['雙手撐在椅緣，背部貼近椅子下放', '手肘向後夾', '腳伸直難度較高，屈膝較易', '勿聳肩'],
     animationType: 'push',
-    image: getTutorialImage('BODYWEIGHT', '手臂')
+    image: getTutorialImage('BODYWEIGHT', '手臂', 'press_side')
   },
   {
     id: 'c6',
@@ -690,7 +802,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '背部訓練王牌動作，發展背闊肌寬度。',
     tips: ['手掌朝前正握', '啟動時先下沉肩胛骨', '拉到下巴過槓', '下放要完全伸直手臂'],
     animationType: 'pull',
-    image: getTutorialImage('BODYWEIGHT', '背部')
+    image: getTutorialImage('BODYWEIGHT', '背部', 'pull_back')
   },
   {
     id: 'c7',
@@ -702,7 +814,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '手掌朝向自己，更多二頭肌參與。',
     tips: ['握距與肩同寬', '專注二頭肌收縮', '核心收緊避免過度擺盪', '控制離心下放'],
     animationType: 'pull',
-    image: getTutorialImage('BODYWEIGHT', '手臂')
+    image: getTutorialImage('BODYWEIGHT', '手臂', 'pull_back')
   },
   {
     id: 'c8',
@@ -714,7 +826,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '水平拉動作，適合無法完成標準引體向上的新手，或作為划船訓練。',
     tips: ['身體呈一直線', '將胸口拉向橫槓', '肩胛骨後收夾緊', '調整腳的位置改變難度'],
     animationType: 'pull',
-    image: getTutorialImage('BODYWEIGHT', '背部')
+    image: getTutorialImage('BODYWEIGHT', '背部', 'row_side')
   },
   {
     id: 'c9',
@@ -726,7 +838,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '引體向上與撐體的結合，街頭健身招牌動作。',
     tips: ['強大的爆發力引體', '轉換時手腕翻轉', '身體前傾進行撐體', '多練習擺盪技巧'],
     animationType: 'pull',
-    image: getTutorialImage('BODYWEIGHT', '背部')
+    image: getTutorialImage('BODYWEIGHT', '背部', 'pull_back')
   },
   {
     id: 'c10',
@@ -738,7 +850,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '下肢訓練基礎。',
     tips: ['雙腳與肩同寬', '膝蓋對齊腳尖', '背部挺直', '蹲至大腿平行地面'],
     animationType: 'leg',
-    image: getTutorialImage('BODYWEIGHT', '腿部')
+    image: getTutorialImage('BODYWEIGHT', '腿部', 'squat_side')
   },
   {
     id: 'c11',
@@ -750,7 +862,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '極具挑戰性的單腿動作，考驗肌力與平衡。',
     tips: ['非支撐腿向前伸直', '保持腳跟著地', '手臂前伸輔助平衡', '下蹲要慢且控制'],
     animationType: 'leg',
-    image: getTutorialImage('BODYWEIGHT', '腿部')
+    image: getTutorialImage('BODYWEIGHT', '腿部', 'squat_side')
   },
   {
     id: 'c12',
@@ -762,7 +874,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '動態的單邊腿部訓練。',
     tips: ['跨步距離適中', '後膝接近地面', '軀幹保持正直', '保持核心穩定'],
     animationType: 'leg',
-    image: getTutorialImage('BODYWEIGHT', '腿部')
+    image: getTutorialImage('BODYWEIGHT', '腿部', 'squat_side')
   },
   {
     id: 'c13',
@@ -774,7 +886,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '隨時隨地可做的小腿訓練。',
     tips: ['腳尖墊高可增加行程', '頂端用力踮起停留1秒', '慢下感受拉伸', '可單腳進行增加強度'],
     animationType: 'leg',
-    image: getTutorialImage('BODYWEIGHT', '腿部')
+    image: getTutorialImage('BODYWEIGHT', '腿部', 'squat_side')
   },
   {
     id: 'c14',
@@ -786,7 +898,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '靜態核心訓練，強化腹橫肌。',
     tips: ['手肘在肩膀正下方', '頭、背、臀、腳呈一直線', '臀部夾緊', '勿塌腰或聳肩'],
     animationType: 'core',
-    image: getTutorialImage('BODYWEIGHT', '核心')
+    image: getTutorialImage('BODYWEIGHT', '核心', 'press_side')
   },
   {
     id: 'c15',
@@ -798,7 +910,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '強化側腹肌與核心穩定。',
     tips: ['手肘支撐', '身體呈一直線', '臀部抬高勿下垂', '保持呼吸'],
     animationType: 'core',
-    image: getTutorialImage('BODYWEIGHT', '核心')
+    image: getTutorialImage('BODYWEIGHT', '核心', 'press_side')
   },
   {
     id: 'c16',
@@ -810,7 +922,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '強烈刺激下腹部。',
     tips: ['雙手懸掛於單槓', '利用腹部力量捲起骨盆', '腿部抬高至水平或更高', '避免利用慣性甩動'],
     animationType: 'core',
-    image: getTutorialImage('BODYWEIGHT', '核心')
+    image: getTutorialImage('BODYWEIGHT', '核心', 'pull_back')
   },
   {
     id: 'c17',
@@ -822,7 +934,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '靜態支撐動作，考驗核心與髖屈肌。',
     tips: ['雙手撐地或握把', '雙腿併攏伸直抬起呈L型', '肩膀下沉', '保持呼吸'],
     animationType: 'core',
-    image: getTutorialImage('BODYWEIGHT', '核心')
+    image: getTutorialImage('BODYWEIGHT', '核心', 'press_side')
   },
   {
     id: 'c18',
@@ -834,7 +946,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '安全且有效的核心訓練，強調腰椎貼地。',
     tips: ['平躺，腰部緊貼地面', '對側手腳同時延伸', '動作緩慢控制', '核心持續用力'],
     animationType: 'core',
-    image: getTutorialImage('BODYWEIGHT', '核心')
+    image: getTutorialImage('BODYWEIGHT', '核心', 'press_side')
   },
   {
     id: 'c19',
@@ -846,7 +958,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '倒立入門動作，建立肩膀穩定性。',
     tips: ['雙手撐地與肩同寬', '腹部貼牆(進階)或背部貼牆(初學)', '推地聳肩', '核心收緊'],
     animationType: 'push',
-    image: getTutorialImage('BODYWEIGHT', '肩膀')
+    image: getTutorialImage('BODYWEIGHT', '肩膀', 'press_back')
   },
   {
     id: 'c20',
@@ -858,7 +970,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '高難度靜態神技，身體水平懸掛於槓下。',
     tips: ['手臂伸直', '背闊肌強力下壓', '核心收緊保持水平', '從團身(Tuck)開始練習'],
     animationType: 'pull',
-    image: getTutorialImage('BODYWEIGHT', '背部')
+    image: getTutorialImage('BODYWEIGHT', '背部', 'pull_back')
   },
   {
     id: 'c21',
@@ -870,6 +982,6 @@ export const TUTORIALS_DATA: Tutorial[] = [
     description: '上肢訓練王牌動作，全面刺激胸大肌。',
     tips: ['仰臥，雙眼位於槓鈴下方', '握距略寬於肩', '下放至胸口乳頭連線', '推起時吐氣'],
     animationType: 'push',
-    image: getTutorialImage('BARBELL', '胸部')
+    image: getTutorialImage('BARBELL', '胸部', 'press_side')
   }
 ];

@@ -1,10 +1,11 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DEFAULT_PLANS, HK_HOLIDAYS } from '../constants';
 import { DailyPlan, ScheduledWorkout, WorkoutRecord, ExerciseSetLog, CalendarEvent, NutritionLog, UserProfile, Exercise, Language } from '../types';
-import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings, Minus, RefreshCw, RotateCcw, PenTool, Flame, Pencil, Save, Trophy, Share2, ClipboardPaste, BrainCircuit, Box, Bell, Copy } from 'lucide-react';
+import { Calendar as CalendarIcon, List, ChevronRight, ChevronLeft, Check, Dumbbell, Sparkles, Loader2, X, Timer, AlertTriangle, Plus, Trash2, Utensils, Clock, History as HistoryIcon, ArrowUpRight, Settings, Minus, RefreshCw, RotateCcw, PenTool, Flame, Pencil, Save, Trophy, Share2, ClipboardPaste, BrainCircuit, Box, Bell, Copy, MoreHorizontal, Footprints, Camera } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { apiGetSchedule, apiSaveSchedule, apiGetEvents, apiSaveEvent, apiDeleteEvent } from '../lib/db';
+import { getPhotosFromDB, BodyPhoto } from '../lib/localDb';
 
 type Mode = 'TIMETABLE' | 'PLANS' | 'CREATE' | 'MANUAL_CREATE' | 'IMPORT_TEXT' | 'ACTIVE_SESSION' | 'SUMMARY';
 
@@ -106,10 +107,15 @@ const Workout: React.FC<WorkoutProps> = ({
   const [mode, setMode] = useState<Mode>('TIMETABLE');
   const [schedule, setSchedule] = useState<ScheduledWorkout[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [bodyPhotos, setBodyPhotos] = useState<BodyPhoto[]>([]);
   
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   
+  // Modal for Day Details
+  const [showDayDetailModal, setShowDayDetailModal] = useState(false);
+  const [viewPhoto, setViewPhoto] = useState<BodyPhoto | null>(null);
+
   const [activePlan, setActivePlan] = useState<DailyPlan | null>(null);
 
   const [sessionStartTime, setSessionStartTime] = useState<number>(0);
@@ -159,7 +165,7 @@ const Workout: React.FC<WorkoutProps> = ({
         library: '課表庫',
         warmup: '熱身',
         main: '主訓練',
-        core: '核心 / 收操',
+        core: '核心 / 拉伸',
         start: '開始',
         resting: '休息中',
         workoutProgress: '訓練進行中',
@@ -198,7 +204,7 @@ const Workout: React.FC<WorkoutProps> = ({
         library: 'Library',
         warmup: 'Warmup',
         main: 'Main Workout',
-        core: 'Core / Cooldown',
+        core: 'Core / Stretch',
         start: 'Start',
         resting: 'Resting',
         workoutProgress: 'In Progress',
@@ -261,12 +267,15 @@ const Workout: React.FC<WorkoutProps> = ({
         }
         const e = await apiGetEvents();
         setEvents(e);
+        
+        // Load Photos
+        getPhotosFromDB().then(setBodyPhotos);
     };
     loadData();
     if ("Notification" in window && Notification.permission !== "granted") {
         Notification.requestPermission();
     }
-  }, []);
+  }, [mode]); // Re-fetch on mode change (e.g. back from dashboard)
 
   // Cycle loading tips
   useEffect(() => {
@@ -379,17 +388,29 @@ const Workout: React.FC<WorkoutProps> = ({
       }
       for (let i = 1; i <= daysInMonth; i++) {
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+          
+          // Check for data on this day
           const dayWorkouts = schedule.filter(s => s.date === dateStr);
+          const dayNutrition = nutritionLogs.filter(n => n.date === dateStr);
+          const dayEvents = events.filter(e => e.date === dateStr);
+          const hasBodyPhoto = bodyPhotos.some(p => p.date === dateStr);
+
           const hasWorkout = dayWorkouts.length > 0;
           const isCompleted = dayWorkouts.length > 0 && dayWorkouts.every(s => s.completed);
+          const hasNutrition = dayNutrition.length > 0;
+          const hasEvent = dayEvents.length > 0;
+
           days.push({
               day: i,
               dateStr: dateStr,
               isToday: dateStr === new Date().toISOString().split('T')[0],
               isSelected: dateStr === selectedDate,
               holiday: HK_HOLIDAYS[dateStr],
-              hasWorkout: hasWorkout,
-              isCompleted: isCompleted
+              hasWorkout,
+              isCompleted,
+              hasNutrition,
+              hasEvent,
+              hasBodyPhoto
           });
       }
       return days;
@@ -443,6 +464,7 @@ const Workout: React.FC<WorkoutProps> = ({
       });
       setSessionLogs(initialLogs);
       setMode('ACTIVE_SESSION');
+      setShowDayDetailModal(false); // Close modal when starting
   };
 
   const handleFinishSession = async () => {
@@ -745,8 +767,8 @@ const Workout: React.FC<WorkoutProps> = ({
       setMode('PLANS');
   };
 
-  const handleAddManualExercise = () => {
-      setManualExercises([...manualExercises, { name: '', sets: 3, reps: '10', weight: 0, section: 'main' }]);
+  const handleAddManualExercise = (section: 'warmup' | 'main' | 'core' = 'main') => {
+      setManualExercises([...manualExercises, { name: '', sets: 3, reps: '10', weight: 0, section }]);
   };
 
   const updateManualExercise = (index: number, field: string, value: any) => {
@@ -993,9 +1015,9 @@ const Workout: React.FC<WorkoutProps> = ({
         {mode === 'TIMETABLE' && (
             <div className="space-y-6 animate-fade-in">
                 {/* Calendar Grid View */}
-                <div className="bg-white dark:bg-charcoal-800 rounded-3xl shadow-sm border border-gray-200 dark:border-charcoal-700 p-5">
+                <div className="bg-white dark:bg-charcoal-800 rounded-3xl shadow-sm border border-gray-200 dark:border-charcoal-700 p-3 md:p-5">
                     {/* Calendar Header */}
-                    <div className="flex justify-between items-center mb-6">
+                    <div className="flex justify-between items-center mb-6 px-2">
                         <h3 className="text-xl font-bold">
                             {currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月
                         </h3>
@@ -1013,33 +1035,49 @@ const Workout: React.FC<WorkoutProps> = ({
                     </div>
 
                     {/* Days Grid */}
-                    <div className="grid grid-cols-7 gap-y-3">
+                    <div className="grid grid-cols-7 gap-1 md:gap-2">
                         {generateCalendarDays().map((dateObj, index) => {
                             if (!dateObj) return <div key={`empty-${index}`} />;
                             
                             return (
                                 <div 
                                     key={index} 
-                                    onClick={() => setSelectedDate(dateObj.dateStr)}
-                                    className="flex flex-col items-center gap-1 cursor-pointer group"
-                                >
-                                    <div className={`w-9 h-9 flex items-center justify-center rounded-full text-sm font-bold transition-all relative
+                                    onClick={() => {
+                                        setSelectedDate(dateObj.dateStr);
+                                        setShowDayDetailModal(true);
+                                    }}
+                                    className={`relative flex flex-col items-center justify-start py-2 h-16 md:h-20 rounded-xl cursor-pointer transition-all border
                                         ${dateObj.isSelected 
-                                            ? 'bg-cta-orange text-white shadow-lg shadow-orange-500/30 scale-110' 
+                                            ? 'bg-cta-orange/10 border-cta-orange dark:bg-cta-orange/20' 
                                             : dateObj.isToday 
-                                                ? 'bg-gray-100 dark:bg-charcoal-700 text-cta-orange border border-cta-orange'
-                                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-charcoal-700'}
-                                    `}>
+                                                ? 'bg-gray-50 dark:bg-charcoal-750 border-gray-200 dark:border-charcoal-600'
+                                                : 'bg-transparent border-transparent hover:bg-gray-50 dark:hover:bg-charcoal-750'}
+                                    `}
+                                >
+                                    <span className={`text-sm font-bold ${dateObj.holiday ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
                                         {dateObj.day}
-                                        {dateObj.hasWorkout && (
-                                            <div className={`absolute bottom-1 w-1 h-1 rounded-full ${dateObj.isCompleted ? 'bg-neon-green' : 'bg-orange-300'} ${dateObj.isSelected ? 'bg-white' : ''}`}></div>
-                                        )}
-                                    </div>
+                                    </span>
                                     
-                                    {/* Holiday Label */}
-                                    <div className="h-3 flex items-center justify-center">
-                                        {dateObj.holiday && (
-                                            <span className="text-[9px] text-red-500 whitespace-nowrap overflow-hidden text-ellipsis max-w-[40px] block leading-none transform scale-90">{dateObj.holiday}</span>
+                                    {/* Holiday Name */}
+                                    {dateObj.holiday && (
+                                        <span className="text-[9px] md:text-[10px] text-red-500 leading-none text-center px-1 mt-0.5 line-clamp-1 w-full overflow-hidden text-ellipsis">
+                                            {dateObj.holiday}
+                                        </span>
+                                    )}
+
+                                    {/* Indicators */}
+                                    <div className="flex gap-1 mt-auto mb-1">
+                                        {dateObj.hasWorkout && (
+                                            <div className={`w-1.5 h-1.5 rounded-full ${dateObj.isCompleted ? 'bg-cta-orange' : 'bg-orange-300 ring-1 ring-orange-200'}`}></div>
+                                        )}
+                                        {dateObj.hasNutrition && (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-neon-green"></div>
+                                        )}
+                                        {dateObj.hasEvent && (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-neon-blue"></div>
+                                        )}
+                                        {dateObj.hasBodyPhoto && (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
                                         )}
                                     </div>
                                 </div>
@@ -1048,39 +1086,156 @@ const Workout: React.FC<WorkoutProps> = ({
                     </div>
                 </div>
 
-                {/* Selected Day Agenda */}
-                <div className="bg-white dark:bg-charcoal-800 rounded-2xl shadow-sm border border-gray-200 dark:border-charcoal-700 p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <div>
-                            <h3 className="text-xl font-bold flex items-center gap-2">{selectedDate} {HK_HOLIDAYS[selectedDate] && <span className="text-xs bg-red-100 text-red-500 px-2 py-1 rounded">{HK_HOLIDAYS[selectedDate]}</span>}</h3>
-                            <p className="text-sm text-gray-500">{t.overview}</p>
-                        </div>
-                        <button onClick={() => setShowAddEventModal(true)} className="p-2 bg-gray-100 dark:bg-charcoal-700 rounded-full text-gray-600 dark:text-gray-300 hover:bg-neon-blue hover:text-charcoal-900 transition-colors"><Plus size={20} /></button>
-                    </div>
+                {/* Day Details Modal */}
+                {showDayDetailModal && (
+                    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowDayDetailModal(false)}>
+                        <div 
+                            className="bg-white dark:bg-charcoal-800 w-full md:max-w-md md:rounded-3xl rounded-t-3xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="p-5 border-b border-gray-100 dark:border-charcoal-700 flex justify-between items-center bg-white dark:bg-charcoal-800 sticky top-0 z-10">
+                                <div>
+                                    <h3 className="text-2xl font-bold flex items-center gap-2">
+                                        {new Date(selectedDate).getDate()}日 
+                                        <span className="text-base text-gray-500 font-normal">
+                                            ({new Date(selectedDate).toLocaleDateString(language === 'zh' ? 'zh-TW' : 'en-US', { weekday: 'short' })})
+                                        </span>
+                                    </h3>
+                                    {HK_HOLIDAYS[selectedDate] && <span className="text-xs bg-red-100 text-red-500 px-2 py-0.5 rounded font-bold">{HK_HOLIDAYS[selectedDate]}</span>}
+                                </div>
+                                <button onClick={() => setShowDayDetailModal(false)} className="bg-gray-100 dark:bg-charcoal-700 p-2 rounded-full text-gray-500"><X size={20}/></button>
+                            </div>
 
-                    <div className="space-y-4">
-                        {schedule.filter(s => s.date === selectedDate).length === 0 && events.filter(e => e.date === selectedDate).length === 0 && (
-                             <div className="text-center py-10 text-gray-400 bg-gray-50 dark:bg-charcoal-900/50 rounded-xl border-dashed border-2 border-gray-100 dark:border-charcoal-700">
-                                <Dumbbell className="mx-auto mb-3 opacity-20" size={32}/>
-                                <p className="font-bold text-gray-500 dark:text-gray-300">今天休息日？</p>
-                                <p className="text-xs mb-4">今天還沒有安排任何活動。</p>
-                                <button onClick={() => setMode('PLANS')} className="bg-neon-blue text-charcoal-900 px-4 py-2 rounded-full text-xs font-bold hover:bg-cyan-400 transition-colors">去安排訓練</button>
-                             </div>
-                        )}
-                        {schedule.filter(s => s.date === selectedDate).map((s, idx) => {
-                             const plan = allPlans.find(p => p.id === s.planId);
-                             return (
-                                <div key={idx} className="relative pl-10 flex flex-col group">
-                                    <div className="absolute left-[11px] top-1 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-charcoal-800 bg-cta-orange z-10"></div>
-                                    <div className="flex items-center justify-between bg-gray-50 dark:bg-charcoal-900 p-3 rounded-xl border border-gray-100 dark:border-charcoal-700">
-                                        <div><h4 className="font-bold flex items-center gap-2"><Dumbbell size={14} className="text-cta-orange"/> {plan?.title || '訓練'}</h4><p className="text-xs text-gray-500">{s.completed ? '已完成' : '待完成'}</p></div>
-                                        {!s.completed && <button onClick={() => plan && handleStartSession(plan)} className="text-xs bg-cta-orange text-white px-3 py-1.5 rounded-full font-bold shadow-lg shadow-orange-500/20">{t.start}</button>}
+                            <div className="p-5 overflow-y-auto space-y-6">
+                                {/* Body Records Section (Photos) */}
+                                {bodyPhotos.some(p => p.date === selectedDate) && (
+                                    <div>
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2"><Camera size={16}/> 體態記錄</h4>
+                                        </div>
+                                        <div className="flex gap-2 overflow-x-auto pb-2">
+                                            {bodyPhotos.filter(p => p.date === selectedDate).map(photo => (
+                                                <div 
+                                                    key={photo.id} 
+                                                    onClick={() => setViewPhoto(photo)}
+                                                    className="w-20 h-28 bg-gray-100 dark:bg-charcoal-900 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200 dark:border-charcoal-700 cursor-pointer"
+                                                >
+                                                    <img src={photo.imageData} className="w-full h-full object-cover" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Workout Section */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2"><Dumbbell size={16}/> 訓練計畫</h4>
+                                        <button onClick={() => { setShowDayDetailModal(false); setMode('PLANS'); }} className="text-xs text-neon-blue font-bold">+ 安排</button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {schedule.filter(s => s.date === selectedDate).length === 0 ? (
+                                            <div className="text-center py-6 bg-gray-50 dark:bg-charcoal-900/50 rounded-xl border border-dashed border-gray-200 dark:border-charcoal-700">
+                                                <p className="text-xs text-gray-400">今日無安排訓練</p>
+                                            </div>
+                                        ) : (
+                                            schedule.filter(s => s.date === selectedDate).map((s, idx) => {
+                                                const plan = allPlans.find(p => p.id === s.planId);
+                                                return (
+                                                    <div key={idx} className="bg-white dark:bg-charcoal-900 p-4 rounded-2xl border border-gray-200 dark:border-charcoal-700 shadow-sm flex justify-between items-center">
+                                                        <div>
+                                                            <h5 className="font-bold text-lg text-gray-800 dark:text-white">{plan?.title || '未知課表'}</h5>
+                                                            <p className="text-xs text-gray-500">{plan?.focus} • {plan?.duration} min</p>
+                                                        </div>
+                                                        {s.completed ? (
+                                                            <span className="text-xs font-bold bg-green-100 text-green-600 px-3 py-1 rounded-full flex items-center gap-1"><Check size={12}/> 完成</span>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={() => plan && handleStartSession(plan)} 
+                                                                className="bg-cta-orange text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-transform"
+                                                            >
+                                                                開始
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })
+                                        )}
                                     </div>
                                 </div>
-                             );
-                        })}
+
+                                {/* Nutrition Section */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2"><Utensils size={16}/> 飲食攝取</h4>
+                                    </div>
+                                    {nutritionLogs.filter(n => n.date === selectedDate).length > 0 ? (
+                                        <div className="bg-neon-green/10 border border-neon-green/20 p-4 rounded-2xl">
+                                            <div className="flex justify-between items-end mb-2">
+                                                <span className="text-xs text-gray-600 dark:text-gray-300 font-bold">總熱量</span>
+                                                <span className="text-xl font-black text-gray-800 dark:text-white">
+                                                    {nutritionLogs.filter(n => n.date === selectedDate).reduce((sum, n) => sum + n.calories, 0)} <span className="text-xs font-normal text-gray-500">kcal</span>
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                {nutritionLogs.filter(n => n.date === selectedDate).slice(0, 3).map((n, i) => (
+                                                    <span key={i} className="text-[10px] bg-white dark:bg-charcoal-800 px-2 py-1 rounded border border-gray-100 dark:border-charcoal-700 truncate max-w-[80px]">{n.item}</span>
+                                                ))}
+                                                {nutritionLogs.filter(n => n.date === selectedDate).length > 3 && <span className="text-[10px] text-gray-400 self-center">...</span>}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-6 bg-gray-50 dark:bg-charcoal-900/50 rounded-xl border border-dashed border-gray-200 dark:border-charcoal-700">
+                                            <p className="text-xs text-gray-400">今日無飲食記錄</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Events Section */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2"><Clock size={16}/> 行程活動</h4>
+                                        <button onClick={() => setShowAddEventModal(true)} className="text-xs text-neon-blue font-bold">+ 新增</button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {events.filter(e => e.date === selectedDate).length > 0 ? (
+                                            events.filter(e => e.date === selectedDate).map((event) => (
+                                                <div key={event.id} className="flex gap-3 items-center bg-gray-50 dark:bg-charcoal-900 p-3 rounded-xl border border-gray-100 dark:border-charcoal-700">
+                                                    <div className="w-1 h-8 bg-neon-blue rounded-full"></div>
+                                                    <div>
+                                                        <p className="font-bold text-sm text-gray-800 dark:text-white">{event.title}</p>
+                                                        <p className="text-xs text-gray-500">{event.time}</p>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="text-center py-6 bg-gray-50 dark:bg-charcoal-900/50 rounded-xl border border-dashed border-gray-200 dark:border-charcoal-700">
+                                                <p className="text-xs text-gray-400">今日無其他行程</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                )}
+
+                {/* Photo Viewer Modal */}
+                {viewPhoto && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setViewPhoto(null)}>
+                        <div className="relative max-w-full max-h-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                            <img src={viewPhoto.imageData} className="max-w-full max-h-[80vh] rounded-lg shadow-2xl" />
+                            <div className="flex items-center gap-4 mt-4">
+                                <div className="bg-charcoal-800 text-white px-4 py-2 rounded-full font-mono text-sm shadow-lg border border-charcoal-700">
+                                    {viewPhoto.date}
+                                </div>
+                            </div>
+                            <button onClick={() => setViewPhoto(null)} className="absolute -top-12 right-0 p-2 text-white hover:text-gray-300">
+                                <X size={32} />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
         
@@ -1165,22 +1320,72 @@ const Workout: React.FC<WorkoutProps> = ({
                     </div>
                 </div>
 
-                <div className="space-y-2">
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">動作列表</h4>
-                    {manualExercises.map((ex, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-charcoal-900 rounded-lg">
-                            <input type="text" value={ex.name} onChange={(e) => updateManualExercise(idx, 'name', e.target.value)} placeholder="動作名稱" className="flex-1 bg-transparent outline-none text-sm font-bold" />
-                            <input type="number" value={ex.sets} onChange={(e) => updateManualExercise(idx, 'sets', Number(e.target.value))} className="w-10 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="組" />
-                            <input type="text" value={ex.reps} onChange={(e) => updateManualExercise(idx, 'reps', e.target.value)} className="w-12 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="次" />
-                            <button onClick={() => removeManualExercise(idx)} className="text-red-400 hover:text-red-500"><X size={16}/></button>
-                        </div>
-                    ))}
-                    <button onClick={handleAddManualExercise} className="w-full py-2 border-2 border-dashed border-gray-200 dark:border-charcoal-700 rounded-xl text-gray-400 hover:text-neon-blue hover:border-neon-blue transition-colors text-sm font-bold flex items-center justify-center gap-2">
-                        <Plus size={16} /> {t.addExercise}
-                    </button>
+                <div className="space-y-6 pt-2">
+                    {/* Warmup Section */}
+                    <div className="space-y-2">
+                        <h4 className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-2 border-b border-orange-400/20 pb-1 mb-2">
+                            <Flame size={14}/> {t.warmup}
+                        </h4>
+                        {manualExercises.map((ex, idx) => {
+                            if (ex.section !== 'warmup') return null;
+                            return (
+                                <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-charcoal-900 rounded-lg">
+                                    <input type="text" value={ex.name} onChange={(e) => updateManualExercise(idx, 'name', e.target.value)} placeholder="動作名稱" className="flex-1 bg-transparent outline-none text-sm font-bold" />
+                                    <input type="number" value={ex.sets} onChange={(e) => updateManualExercise(idx, 'sets', Number(e.target.value))} className="w-10 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="組" />
+                                    <input type="text" value={ex.reps} onChange={(e) => updateManualExercise(idx, 'reps', e.target.value)} className="w-12 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="次" />
+                                    <button onClick={() => removeManualExercise(idx)} className="text-red-400 hover:text-red-500"><X size={16}/></button>
+                                </div>
+                            );
+                        })}
+                        <button onClick={() => handleAddManualExercise('warmup')} className="w-full py-2 border border-dashed border-orange-200 dark:border-orange-900 rounded-xl text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors text-xs font-bold flex items-center justify-center gap-2">
+                            <Plus size={14} /> 新增{t.warmup}
+                        </button>
+                    </div>
+
+                    {/* Main Workout Section */}
+                    <div className="space-y-2">
+                        <h4 className="text-xs font-bold text-neon-blue uppercase tracking-wider flex items-center gap-2 border-b border-neon-blue/20 pb-1 mb-2">
+                            <Dumbbell size={14}/> {t.main}
+                        </h4>
+                        {manualExercises.map((ex, idx) => {
+                            if (ex.section !== 'main' && ex.section) return null; // Default to main if undefined
+                            return (
+                                <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-charcoal-900 rounded-lg">
+                                    <input type="text" value={ex.name} onChange={(e) => updateManualExercise(idx, 'name', e.target.value)} placeholder="動作名稱" className="flex-1 bg-transparent outline-none text-sm font-bold" />
+                                    <input type="number" value={ex.sets} onChange={(e) => updateManualExercise(idx, 'sets', Number(e.target.value))} className="w-10 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="組" />
+                                    <input type="text" value={ex.reps} onChange={(e) => updateManualExercise(idx, 'reps', e.target.value)} className="w-12 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="次" />
+                                    <button onClick={() => removeManualExercise(idx)} className="text-red-400 hover:text-red-500"><X size={16}/></button>
+                                </div>
+                            );
+                        })}
+                        <button onClick={() => handleAddManualExercise('main')} className="w-full py-2 border border-dashed border-neon-blue/30 rounded-xl text-neon-blue hover:bg-neon-blue/10 transition-colors text-xs font-bold flex items-center justify-center gap-2">
+                            <Plus size={14} /> 新增{t.main}
+                        </button>
+                    </div>
+
+                    {/* Core/Cooldown Section */}
+                    <div className="space-y-2">
+                        <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2 border-b border-purple-400/20 pb-1 mb-2">
+                            <RotateCcw size={14}/> {t.core}
+                        </h4>
+                        {manualExercises.map((ex, idx) => {
+                            if (ex.section !== 'core') return null;
+                            return (
+                                <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-charcoal-900 rounded-lg">
+                                    <input type="text" value={ex.name} onChange={(e) => updateManualExercise(idx, 'name', e.target.value)} placeholder="動作名稱" className="flex-1 bg-transparent outline-none text-sm font-bold" />
+                                    <input type="number" value={ex.sets} onChange={(e) => updateManualExercise(idx, 'sets', Number(e.target.value))} className="w-10 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="組" />
+                                    <input type="text" value={ex.reps} onChange={(e) => updateManualExercise(idx, 'reps', e.target.value)} className="w-12 text-center bg-transparent border-b border-gray-300 dark:border-charcoal-600 outline-none text-sm" placeholder="次" />
+                                    <button onClick={() => removeManualExercise(idx)} className="text-red-400 hover:text-red-500"><X size={16}/></button>
+                                </div>
+                            );
+                        })}
+                        <button onClick={() => handleAddManualExercise('core')} className="w-full py-2 border border-dashed border-purple-200 dark:border-purple-900 rounded-xl text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-xs font-bold flex items-center justify-center gap-2">
+                            <Plus size={14} /> 新增{t.core}
+                        </button>
+                    </div>
                 </div>
 
-                <button onClick={handleSaveManualPlan} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2">
+                <button onClick={handleSaveManualPlan} className="w-full bg-cta-orange text-white font-bold py-3 rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2 mt-4">
                     <Save size={18} /> {t.savePlan}
                 </button>
             </div>
