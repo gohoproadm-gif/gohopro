@@ -5,7 +5,7 @@ import { Dumbbell, Mail, Lock, LogIn, UserPlus, AlertCircle, ArrowRight, Activit
 import { Language } from '../types';
 
 interface LoginProps {
-  onLoginSuccess: (isAdmin?: boolean) => void;
+  onLoginSuccess: (isAdmin?: boolean, isDemo?: boolean) => void;
   language: Language;
   setLanguage: (lang: Language) => void;
 }
@@ -116,7 +116,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, language, setLanguage }) 
         }
         setTimeout(() => {
             setLoading(false);
-            onLoginSuccess(true);
+            onLoginSuccess(true, false);
         }, 800);
         return;
     }
@@ -124,7 +124,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, language, setLanguage }) 
     // Demo Mode Fallback
     if (!isFirebaseConfigured) {
         if (email === 'demo@example.com' || password === 'demo') {
-            onLoginSuccess(false);
+            onLoginSuccess(false, true); // Treat explicit demo login same as button
             return;
         }
         setError("Firebase Not Configured. Try Demo Mode.");
@@ -140,7 +140,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, language, setLanguage }) 
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      onLoginSuccess(false);
+      onLoginSuccess(false, false);
     } catch (err: any) {
       console.error("Auth Error:", err);
       // Map error codes to localized messages if needed, simplified here
@@ -164,7 +164,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, language, setLanguage }) 
       try {
           const provider = new GoogleAuthProvider();
           await signInWithPopup(auth, provider);
-          onLoginSuccess(false);
+          onLoginSuccess(false, false);
       } catch (err: any) {
           console.error("Google Login Error:", err);
           setError(err.message || "Google Login Failed");
@@ -174,7 +174,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, language, setLanguage }) 
   };
 
   const handleDemoLogin = () => {
-      onLoginSuccess(false);
+      // Pass isDemo = true to persist login state
+      onLoginSuccess(false, true);
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {

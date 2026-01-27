@@ -35,6 +35,26 @@ const App: React.FC = () => {
 
   // 1. Check Authentication on Mount
   useEffect(() => {
+      // Priority 1: Check for persistent Demo Mode (Local Storage)
+      // This ensures mobile users don't see login screen every time
+      const isDemo = localStorage.getItem('gohopro_is_demo') === 'true';
+      if (isDemo) {
+          setIsAuthenticated(true);
+          setIsAdmin(false);
+          setAuthChecked(true);
+          return; // Skip Firebase check if explicitly in demo mode
+      }
+
+      // Priority 2: Check for Admin Session (Session Storage)
+      const adminSession = sessionStorage.getItem('gohopro_admin_session');
+      if (adminSession === 'true') {
+          setIsAuthenticated(true);
+          setIsAdmin(true);
+          setAuthChecked(true);
+          return;
+      }
+
+      // Priority 3: Check Firebase Auth
       if (auth) {
           const unsubscribe = onAuthStateChanged(auth, (user) => {
               if (user) {
@@ -42,16 +62,9 @@ const App: React.FC = () => {
                   setIsAuthenticated(true);
                   setIsAdmin(false); 
               } else {
-                  // Not logged in via Firebase
-                  // Check if we are in "Admin Session" (simple check for this example)
-                  const adminSession = sessionStorage.getItem('gohopro_admin_session');
-                  if (adminSession === 'true') {
-                      setIsAuthenticated(true);
-                      setIsAdmin(true);
-                  } else {
-                      setIsAuthenticated(false);
-                      setIsAdmin(false);
-                  }
+                  // Not logged in via Firebase and not Demo/Admin
+                  setIsAuthenticated(false);
+                  setIsAdmin(false);
               }
               setAuthChecked(true);
           });
@@ -82,7 +95,7 @@ const App: React.FC = () => {
               setHistoryLogs(MOCK_HISTORY);
               setNutritionLogs(NUTRITION_LOGS);
           } else {
-              // Real User Data
+              // Real User Data (or Demo Data stored locally)
               
               // 1. Fetch System Keys first (if available in cloud, sync to local)
               // This allows normal users to access keys set by admin
@@ -165,20 +178,28 @@ const App: React.FC = () => {
     }
   };
   
-  const handleLoginSuccess = (adminLogin: boolean = false) => {
+  const handleLoginSuccess = (adminLogin: boolean = false, isDemo: boolean = false) => {
       if (adminLogin) {
           setIsAdmin(true);
           sessionStorage.setItem('gohopro_admin_session', 'true');
       } else {
           setIsAdmin(false);
           sessionStorage.removeItem('gohopro_admin_session');
+          
+          if (isDemo) {
+              // Persist Demo Login so user doesn't see login screen on refresh
+              localStorage.setItem('gohopro_is_demo', 'true');
+          }
       }
       setIsAuthenticated(true);
   };
 
   const handleLogout = async () => {
+      // Clear persistence flags
+      localStorage.removeItem('gohopro_is_demo');
+      sessionStorage.removeItem('gohopro_admin_session');
+
       if (isAdmin) {
-          sessionStorage.removeItem('gohopro_admin_session');
           setIsAdmin(false);
       } else if (auth) {
           try {
@@ -187,6 +208,7 @@ const App: React.FC = () => {
             console.error("Logout failed", error);
           }
       }
+      
       setIsAuthenticated(false);
       setUserProfile(null);
       setCurrentView(View.DASHBOARD);
