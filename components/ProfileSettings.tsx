@@ -14,6 +14,7 @@ interface ProfileSettingsProps {
 const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdateProfile, onLogout, isAdmin }) => {
   const [profile, setProfile] = useState<UserProfile>(userProfile);
   const [isSaved, setIsSaved] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Admin System Keys
@@ -34,6 +35,10 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
         setSystemOpenAIModel(localStorage.getItem('GO_SYSTEM_OPENAI_MODEL') || '');
     }
   }, [isAdmin]);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [profile.avatar]);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
@@ -139,8 +144,13 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ userProfile, onUpdate
                 onClick={() => fileInputRef.current?.click()}
                 className="w-32 h-32 rounded-full overflow-hidden border-4 border-gray-100 dark:border-charcoal-700 cursor-pointer relative group"
             >
-                {profile.avatar ? (
-                    <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                {profile.avatar && !imgError ? (
+                    <img 
+                        src={profile.avatar} 
+                        alt="Avatar" 
+                        className="w-full h-full object-cover"
+                        onError={() => setImgError(true)}
+                    />
                 ) : (
                     <div className={`w-full h-full flex items-center justify-center ${profile.gender === 'female' ? 'bg-pink-100 text-pink-500' : 'bg-blue-100 text-blue-500'}`}>
                         <User size={48} />

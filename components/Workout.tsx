@@ -7,7 +7,7 @@ import {
   Sparkles, Loader2, StopCircle, Pause, SkipForward, Info, 
   ChevronLeft, ChevronRight as ChevronRightIcon,
   Calendar, Save, Edit3, FileText, ClipboardPen, ListPlus, Trash,
-  Timer, RotateCcw
+  Timer, RotateCcw, Utensils, Camera
 } from 'lucide-react';
 import { 
   DailyPlan, WorkoutRecord, UserProfile, NutritionLog, 
@@ -18,6 +18,7 @@ import {
   apiGetSchedule, apiSaveSchedule, apiGetEvents, 
   apiSaveEvent, apiDeleteEvent 
 } from '../lib/db';
+import { getPhotosFromDB, BodyPhoto } from '../lib/localDb';
 
 interface WorkoutProps {
   autoStart: boolean;
@@ -73,7 +74,10 @@ const Workout: React.FC<WorkoutProps> = ({
       analyzing: '正在分析內容...',
       manual: '手動建立',
       restTimer: '休息計時',
-      resume: '繼續訓練'
+      resume: '繼續訓練',
+      nutrition: '飲食記錄',
+      bodyPhotos: '體態記錄',
+      kcal: '千卡'
     },
     en: {
       schedule: 'Schedule',
@@ -109,7 +113,10 @@ const Workout: React.FC<WorkoutProps> = ({
       analyzing: 'Analyzing content...',
       manual: 'Manual',
       restTimer: 'Rest Timer',
-      resume: 'Resume'
+      resume: 'Resume',
+      nutrition: 'Nutrition Logs',
+      bodyPhotos: 'Body Photos',
+      kcal: 'kcal'
     }
   }[language];
 
@@ -119,6 +126,9 @@ const Workout: React.FC<WorkoutProps> = ({
   const [customPlans, setCustomPlans] = useState<DailyPlan[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  
+  // --- State: Photos ---
+  const [photos, setPhotos] = useState<BodyPhoto[]>([]);
 
   // --- State: Modals ---
   const [showAiModal, setShowAiModal] = useState(false);
@@ -177,6 +187,9 @@ const Workout: React.FC<WorkoutProps> = ({
       if (storedPlans) {
         setCustomPlans(JSON.parse(storedPlans));
       }
+
+      // Load Photos
+      getPhotosFromDB().then(setPhotos).catch(console.error);
 
       // Check for active session recovery
       const savedSession = localStorage.getItem('fitlife_active_session');
@@ -572,6 +585,9 @@ const Workout: React.FC<WorkoutProps> = ({
           dateStr,
           hasWorkout: schedule.some(s => s.date === dateStr),
           hasEvent: events.some(e => e.date === dateStr),
+          hasNutrition: nutritionLogs.some(n => n.date === dateStr),
+          hasPhoto: photos.some(p => p.date === dateStr),
+          hasCompletedWorkout: historyLogs.some(h => h.date === dateStr),
           isHoliday: !!HK_HOLIDAYS[dateStr],
           isToday: dateStr === new Date().toISOString().split('T')[0]
       };
@@ -699,9 +715,12 @@ const Workout: React.FC<WorkoutProps> = ({
                         }`}
                     >
                         <span className={`text-sm ${d.isHoliday ? 'text-red-500' : ''}`}>{d.day}</span>
-                        <div className="flex gap-1 mt-1">
+                        <div className="flex gap-1 mt-1 justify-center flex-wrap px-1">
                             {d.hasWorkout && <div className="w-1.5 h-1.5 rounded-full bg-cta-orange"></div>}
                             {d.hasEvent && <div className="w-1.5 h-1.5 rounded-full bg-neon-purple"></div>}
+                            {d.hasNutrition && <div className="w-1.5 h-1.5 rounded-full bg-neon-green"></div>}
+                            {d.hasPhoto && <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>}
+                            {d.hasCompletedWorkout && !d.hasWorkout && <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>}
                         </div>
                     </div>
                 ))}
@@ -951,6 +970,40 @@ const Workout: React.FC<WorkoutProps> = ({
                     </div>
 
                     <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-[150px]">
+                        
+                        {/* Nutrition Section */}
+                        {nutritionLogs.filter(n => n.date === selectedDate).length > 0 && (
+                            <div className="bg-gray-50 dark:bg-charcoal-900 p-4 rounded-xl border-l-4 border-neon-green">
+                                <h4 className="font-bold text-gray-800 dark:text-white mb-2 flex items-center gap-2">
+                                    <Utensils size={16}/> {t.nutrition}
+                                </h4>
+                                <div className="space-y-2">
+                                    {nutritionLogs.filter(n => n.date === selectedDate).map(log => (
+                                        <div key={log.id} className="flex justify-between text-sm">
+                                            <span>{log.item}</span>
+                                            <span className="font-mono text-gray-500">{log.calories} {t.kcal}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Photos Section */}
+                        {photos.filter(p => p.date === selectedDate).length > 0 && (
+                            <div className="bg-gray-50 dark:bg-charcoal-900 p-4 rounded-xl border-l-4 border-pink-500">
+                                <h4 className="font-bold text-gray-800 dark:text-white mb-2 flex items-center gap-2">
+                                    <Camera size={16}/> {t.bodyPhotos}
+                                </h4>
+                                <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {photos.filter(p => p.date === selectedDate).map(photo => (
+                                        <div key={photo.id} className="w-16 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-charcoal-700 flex-shrink-0">
+                                            <img src={photo.imageData} className="w-full h-full object-cover" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Scheduled Workouts */}
                         {schedule.filter(s => s.date === selectedDate).map((item, idx) => {
                             const plan = allPlans.find(p => p.id === item.planId);
@@ -968,6 +1021,19 @@ const Workout: React.FC<WorkoutProps> = ({
                                 </div>
                             ) : null;
                         })}
+
+                         {/* Completed History (That wasn't explicitly scheduled) */}
+                         {historyLogs.filter(h => h.date === selectedDate && !schedule.some(s => s.date === selectedDate && s.completed && s.planId === allPlans.find(p => p.title === h.type)?.id)).map((record, idx) => (
+                             <div key={`hist-${idx}`} className="bg-gray-50 dark:bg-charcoal-900 p-4 rounded-xl border-l-4 border-blue-500 opacity-80">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h4 className="font-bold text-gray-800 dark:text-white">{record.type}</h4>
+                                        <p className="text-xs text-gray-500">{t.completed} • {record.duration} {t.duration}</p>
+                                    </div>
+                                    <CheckCircle2 className="text-blue-500" size={20} />
+                                </div>
+                            </div>
+                         ))}
 
                         {/* Events */}
                         {events.filter(e => e.date === selectedDate).map((event) => (
@@ -993,7 +1059,11 @@ const Workout: React.FC<WorkoutProps> = ({
                         ))}
 
                         {/* Empty State */}
-                        {!schedule.some(s => s.date === selectedDate) && !events.some(e => e.date === selectedDate) && (
+                        {!schedule.some(s => s.date === selectedDate) && 
+                         !events.some(e => e.date === selectedDate) && 
+                         !nutritionLogs.some(n => n.date === selectedDate) &&
+                         !photos.some(p => p.date === selectedDate) &&
+                         !historyLogs.some(h => h.date === selectedDate) && (
                             <div className="text-center py-8 text-gray-400">
                                 <Info size={32} className="mx-auto mb-2 opacity-30"/>
                                 <p className="text-sm">本日無安排事項</p>

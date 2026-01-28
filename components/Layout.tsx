@@ -1,5 +1,5 @@
 
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState, useEffect } from 'react';
 import { View, UserProfile, Language } from '../types';
 import { LayoutDashboard, History, Dumbbell, TrendingUp, Utensils, User, Sun, Moon, BookOpen, Languages } from 'lucide-react';
 
@@ -16,6 +16,13 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, isDarkMode, toggleTheme, userProfile, language, setLanguage }) => {
   
+  const [imgError, setImgError] = useState(false);
+
+  // Reset error state if avatar URL changes
+  useEffect(() => {
+    setImgError(false);
+  }, [userProfile?.avatar]);
+
   const labels = {
     zh: {
       dashboard: '儀錶板',
@@ -47,11 +54,18 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, 
   ];
 
   const renderAvatar = () => {
-    if (userProfile?.avatar) {
-      return <img src={userProfile.avatar} alt="Profile" className="w-full h-full object-cover" />;
+    if (userProfile?.avatar && !imgError) {
+      return (
+        <img 
+            src={userProfile.avatar} 
+            alt="Profile" 
+            className="w-full h-full object-cover" 
+            onError={() => setImgError(true)}
+        />
+      );
     }
     
-    // Default avatar based on gender
+    // Default fallback based on gender
     const isFemale = userProfile?.gender === 'female';
     return (
       <div className={`w-full h-full flex items-center justify-center ${isFemale ? 'bg-pink-100 text-pink-500' : 'bg-blue-100 text-blue-500'}`}>
