@@ -560,7 +560,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
       </div>
 
       {showStepsModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
               <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
                   <div className="flex justify-between items-center mb-6">
                       <h3 className="text-lg font-bold flex items-center gap-2"><Activity className="text-neon-blue"/> {t.editSteps}</h3>
@@ -583,7 +583,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
       )}
 
       {showWaterModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
               <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
                   <div className="flex justify-between items-center mb-6">
                       <h3 className="text-lg font-bold flex items-center gap-2"><Droplets className="text-cyan-400"/> {t.editWater}</h3>
@@ -611,7 +611,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
 
       {/* Upload Preview Modal */}
       {uploadPreview && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
               <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6 flex flex-col gap-4">
                   <div className="flex justify-between items-center">
                       <h3 className="font-bold text-lg">{t.confirmUpload}</h3>
@@ -646,7 +646,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartWorkout, nutritionLogs, hi
 
       {/* Photo Detail Modal */}
       {showPhotoModal.isOpen && showPhotoModal.photo && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowPhotoModal({isOpen: false, photo: null})}>
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowPhotoModal({isOpen: false, photo: null})}>
               <div className="relative max-w-full max-h-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
                   <img src={showPhotoModal.photo.imageData} className="max-w-full max-h-[80vh] rounded-lg shadow-2xl" />
                   <div className="flex items-center gap-4 mt-4">

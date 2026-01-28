@@ -538,7 +538,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
 
       {/* Delete Confirmation Modal - kept same */}
       {deleteModal.isOpen && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                 <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
                     <div className="flex flex-col items-center text-center mb-6">
                         <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-3 text-red-500">
@@ -569,7 +569,7 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
 
       {/* Add/Edit Modal */}
       {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
               <div className="bg-white dark:bg-charcoal-800 w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 dark:border-charcoal-700 overflow-hidden flex flex-col max-h-[90dvh]">
                   <div className="p-4 border-b border-gray-200 dark:border-charcoal-700 flex justify-between items-center bg-gray-50 dark:bg-charcoal-900 shrink-0">
                       <h3 className="font-bold text-lg flex items-center gap-2">

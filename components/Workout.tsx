@@ -6,7 +6,7 @@ import {
   Plus, MoreHorizontal, Trash2, X, CheckCircle2, Dumbbell, 
   Sparkles, Loader2, StopCircle, Pause, SkipForward, Info, 
   ChevronLeft, ChevronRight as ChevronRightIcon,
-  Calendar, Save
+  Calendar, Save, Utensils, Camera, Image as ImageIcon
 } from 'lucide-react';
 import { 
   DailyPlan, WorkoutRecord, UserProfile, NutritionLog, 
@@ -17,6 +17,7 @@ import {
   apiGetSchedule, apiSaveSchedule, apiGetEvents, 
   apiSaveEvent, apiDeleteEvent 
 } from '../lib/db';
+import { getPhotosFromDB, BodyPhoto } from '../lib/localDb';
 
 interface WorkoutProps {
   autoStart: boolean;
@@ -56,7 +57,10 @@ const Workout: React.FC<WorkoutProps> = ({
       delete: '刪除',
       save: '儲存',
       events: '今日事項',
-      completed: '已完成'
+      completed: '已完成',
+      nutrition: '飲食記錄',
+      photos: '體態照片',
+      noContent: '本日無安排事項'
     },
     en: {
       schedule: 'Schedule',
@@ -76,7 +80,10 @@ const Workout: React.FC<WorkoutProps> = ({
       delete: 'Delete',
       save: 'Save',
       events: 'Events',
-      completed: 'Completed'
+      completed: 'Completed',
+      nutrition: 'Nutrition',
+      photos: 'Photos',
+      noContent: 'No activities today'
     }
   }[language];
 
@@ -84,6 +91,7 @@ const Workout: React.FC<WorkoutProps> = ({
   const [schedule, setSchedule] = useState<ScheduledWorkout[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [customPlans, setCustomPlans] = useState<DailyPlan[]>([]);
+  const [photos, setPhotos] = useState<BodyPhoto[]>([]); // Photos state
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
@@ -121,6 +129,14 @@ const Workout: React.FC<WorkoutProps> = ({
       const e = await apiGetEvents();
       setEvents(e);
       
+      // Load Photos
+      try {
+        const p = await getPhotosFromDB();
+        setPhotos(p);
+      } catch (err) {
+        console.error("Failed to load photos in workout view", err);
+      }
+      
       // Load Custom Plans from LocalStorage
       const storedPlans = localStorage.getItem('fitlife_custom_plans');
       if (storedPlans) {
@@ -138,7 +154,7 @@ const Workout: React.FC<WorkoutProps> = ({
     }
   }, [autoStart, externalPlanToStart]);
 
-  // --- API Helpers (Similar to Nutrition.tsx) ---
+  // --- API Helpers ---
   const getDeepSeekConfig = () => {
       let apiKey = localStorage.getItem('GO_SYSTEM_OPENAI_API_KEY');
       let baseUrl = localStorage.getItem('GO_SYSTEM_OPENAI_BASE_URL');
@@ -198,7 +214,6 @@ const Workout: React.FC<WorkoutProps> = ({
       if (!response.ok) throw new Error("AI API Error");
       const data = await response.json();
       let content = data.choices[0].message.content;
-      // Clean JSON
       content = content.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(content);
   };
@@ -338,7 +353,7 @@ const Workout: React.FC<WorkoutProps> = ({
               exerciseName: ex.name,
               sets: Array(ex.sets).fill(0).map((_, i) => ({
                   setNumber: i + 1,
-                  weight: ex.weight || 0, // Using the weight field from exercise for simplicity
+                  weight: ex.weight || 0, 
                   reps: parseInt(ex.reps) || 0,
                   completed: true
               }))
@@ -347,7 +362,6 @@ const Workout: React.FC<WorkoutProps> = ({
 
       onFinishWorkout(record);
       
-      // Update schedule if applicable
       const todayStr = new Date().toISOString().split('T')[0];
       const scheduledItem = schedule.find(s => s.date === todayStr && s.planId === activePlan.id);
       if (scheduledItem) {
@@ -384,6 +398,8 @@ const Workout: React.FC<WorkoutProps> = ({
           dateStr,
           hasWorkout: schedule.some(s => s.date === dateStr),
           hasEvent: events.some(e => e.date === dateStr),
+          hasNutrition: nutritionLogs.some(n => n.date === dateStr),
+          hasPhoto: photos.some(p => p.date === dateStr),
           isHoliday: !!HK_HOLIDAYS[dateStr],
           isToday: dateStr === new Date().toISOString().split('T')[0]
       };
@@ -393,7 +409,6 @@ const Workout: React.FC<WorkoutProps> = ({
   if (workoutState === 'ACTIVE' && activePlan) {
       return (
           <div className="fixed inset-0 z-50 bg-white dark:bg-charcoal-950 flex flex-col">
-              {/* Active Header */}
               <div className="p-4 border-b border-gray-100 dark:border-charcoal-800 flex justify-between items-center bg-white dark:bg-charcoal-900" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
                   <div>
                       <h2 className="font-bold text-lg">{activePlan.title}</h2>
@@ -409,7 +424,6 @@ const Workout: React.FC<WorkoutProps> = ({
                   </button>
               </div>
 
-              {/* Active Content */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
                   {activeExercises.map((ex, idx) => (
                       <div key={ex.id} className={`p-4 rounded-2xl border-2 transition-all ${idx === currentExerciseIdx ? 'border-neon-blue bg-neon-blue/5' : 'border-gray-100 dark:border-charcoal-800 bg-white dark:bg-charcoal-900'}`}>
@@ -488,9 +502,11 @@ const Workout: React.FC<WorkoutProps> = ({
                         }`}
                     >
                         <span className={`text-sm ${d.isHoliday ? 'text-red-500' : ''}`}>{d.day}</span>
-                        <div className="flex gap-1 mt-1">
+                        <div className="flex gap-1 mt-1 justify-center flex-wrap max-w-[80%]">
                             {d.hasWorkout && <div className="w-1.5 h-1.5 rounded-full bg-cta-orange"></div>}
                             {d.hasEvent && <div className="w-1.5 h-1.5 rounded-full bg-neon-purple"></div>}
+                            {d.hasNutrition && <div className="w-1.5 h-1.5 rounded-full bg-neon-green"></div>}
+                            {d.hasPhoto && <div className="w-1.5 h-1.5 rounded-full bg-pink-400"></div>}
                         </div>
                     </div>
                 ))}
@@ -550,7 +566,7 @@ const Workout: React.FC<WorkoutProps> = ({
 
         {/* AI Modal (Bottom Sheet on Mobile) */}
         {showAiModal && (
-            <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-fade-in">
+            <div className="fixed inset-0 z-[100] flex flex-col justify-end md:justify-center md:items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-fade-in">
                 <div 
                     className="bg-white dark:bg-charcoal-800 w-full md:w-full md:max-w-md rounded-t-3xl md:rounded-3xl shadow-2xl p-6 flex flex-col"
                     style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
@@ -582,9 +598,9 @@ const Workout: React.FC<WorkoutProps> = ({
 
         {/* Day Detail Modal (Bottom Sheet on Mobile) */}
         {showDayDetailModal && (
-            <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-fade-in">
+            <div className="fixed inset-0 z-[100] flex flex-col justify-end md:justify-center md:items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-fade-in">
                 <div 
-                    className="bg-white dark:bg-charcoal-800 w-full md:w-full md:max-w-md rounded-t-3xl md:rounded-3xl shadow-2xl p-6 max-h-[90vh] md:max-h-[80vh] flex flex-col"
+                    className="bg-white dark:bg-charcoal-800 w-full md:w-full md:max-w-md rounded-t-3xl md:rounded-3xl shadow-2xl p-6 max-h-[90vh] md:max-h-[80vh] min-h-[50vh] flex flex-col"
                     style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
                 >
                     <div className="flex justify-between items-center mb-6 shrink-0">
@@ -595,7 +611,25 @@ const Workout: React.FC<WorkoutProps> = ({
                         <button onClick={() => setShowDayDetailModal(false)}><X size={24} className="text-gray-400"/></button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-[150px]">
+                    <div className="flex-1 overflow-y-auto space-y-6 pr-1 min-h-[150px]">
+                        
+                        {/* Nutrition Section */}
+                        {nutritionLogs.filter(n => n.date === selectedDate).length > 0 && (
+                            <div className="bg-green-50 dark:bg-green-900/10 p-4 rounded-xl border border-green-100 dark:border-green-900/30">
+                                <h4 className="font-bold text-sm text-green-600 dark:text-green-400 mb-3 flex items-center gap-2">
+                                    <Utensils size={14}/> {t.nutrition}
+                                </h4>
+                                <div className="space-y-2">
+                                    {nutritionLogs.filter(n => n.date === selectedDate).map((log) => (
+                                        <div key={log.id} className="flex justify-between items-center text-xs border-b border-green-200 dark:border-green-800/50 last:border-0 pb-1 last:pb-0">
+                                            <span className="text-gray-700 dark:text-gray-300">{log.item}</span>
+                                            <span className="font-bold text-green-600">{log.calories} kcal</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Scheduled Workouts */}
                         {schedule.filter(s => s.date === selectedDate).map((item, idx) => {
                             const plan = allPlans.find(p => p.id === item.planId);
@@ -637,11 +671,30 @@ const Workout: React.FC<WorkoutProps> = ({
                             </div>
                         ))}
 
+                        {/* Photos Section */}
+                        {photos.filter(p => p.date === selectedDate).length > 0 && (
+                            <div>
+                                <h4 className="font-bold text-sm text-gray-500 mb-3 flex items-center gap-2">
+                                    <Camera size={14}/> {t.photos}
+                                </h4>
+                                <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {photos.filter(p => p.date === selectedDate).map((photo) => (
+                                        <div key={photo.id} className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-charcoal-700 flex-shrink-0">
+                                            <img src={photo.imageData} alt="Body check" className="w-full h-full object-cover" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Empty State */}
-                        {!schedule.some(s => s.date === selectedDate) && !events.some(e => e.date === selectedDate) && (
+                        {!schedule.some(s => s.date === selectedDate) && 
+                         !events.some(e => e.date === selectedDate) && 
+                         !nutritionLogs.some(n => n.date === selectedDate) &&
+                         !photos.some(p => p.date === selectedDate) && (
                             <div className="text-center py-8 text-gray-400">
                                 <Info size={32} className="mx-auto mb-2 opacity-30"/>
-                                <p className="text-sm">本日無安排事項</p>
+                                <p className="text-sm">{t.noContent}</p>
                             </div>
                         )}
                     </div>
@@ -658,7 +711,7 @@ const Workout: React.FC<WorkoutProps> = ({
 
         {/* Delete Confirmation Modal (Keep as Center Modal) */}
         {planToDeleteId && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                 <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
                     <div className="flex flex-col items-center text-center mb-6">
                         <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-3 text-red-500">
@@ -687,7 +740,7 @@ const Workout: React.FC<WorkoutProps> = ({
 
         {/* Add Event/Workout Modal (Bottom Sheet on Mobile) */}
         {showAddEventModal && (
-            <div className="fixed inset-0 z-[60] flex flex-col justify-end md:justify-center md:items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-fade-in">
+            <div className="fixed inset-0 z-[110] flex flex-col justify-end md:justify-center md:items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-fade-in">
                 <div 
                     className="bg-white dark:bg-charcoal-800 w-full md:w-full md:max-w-sm rounded-t-3xl md:rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6 flex flex-col"
                     style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
