@@ -96,10 +96,12 @@ const Nutrition: React.FC<NutritionProps> = ({ logs, setLogs, userProfile, onGoT
     }
   }, [formStep]);
 
-  // ... (API Keys & Config Helpers - kept same)
   // Robust API Key Retrieval (Updated for System Keys)
   const getApiKey = () => {
-    // 1. Check System Key (Admin set)
+    // 1. Check process.env.API_KEY (Highest Priority)
+    if (process.env.API_KEY) return process.env.API_KEY;
+
+    // 2. Check System Key (Admin set)
     const systemKey = localStorage.getItem('GO_SYSTEM_GOOGLE_API_KEY');
     if (systemKey) return systemKey;
 

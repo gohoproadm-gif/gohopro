@@ -305,10 +305,15 @@ const Workout: React.FC<WorkoutProps> = ({
   };
 
   const callGeminiPlan = async (prompt: string, isAnalysis: boolean = false) => {
-      let apiKey = localStorage.getItem('GO_SYSTEM_GOOGLE_API_KEY');
+      // Prioritize process.env.API_KEY as per instructions
+      let apiKey = process.env.API_KEY;
+
+      if (!apiKey) {
+        apiKey = localStorage.getItem('GO_SYSTEM_GOOGLE_API_KEY');
+      }
       
       if (!apiKey && typeof process !== 'undefined' && process.env) {
-        apiKey = process.env.API_KEY || process.env.VITE_API_KEY;
+        apiKey = process.env.VITE_API_KEY;
       }
       
       if (!apiKey) {
@@ -355,7 +360,10 @@ const Workout: React.FC<WorkoutProps> = ({
             }
         }
       });
-      return JSON.parse(response.text);
+      
+      const text = response.text;
+      if (!text) throw new Error("AI response was empty");
+      return JSON.parse(text);
   };
 
   const handleGeneratePlan = async (isImport: boolean = false) => {

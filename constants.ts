@@ -93,6 +93,34 @@ export const DEFAULT_PLANS: DailyPlan[] = [
       { id: 'c2', name: '捲腹', sets: 3, reps: '20', completed: false, section: 'main' },
       { id: 'c3', name: '俄羅斯轉體', sets: 3, reps: '20', completed: false, section: 'main' },
     ]
+  },
+  {
+    id: 'p4',
+    title: "腿部肌力轟炸",
+    focus: "股四頭 / 腿後 / 臀部",
+    duration: 60,
+    exercises: [
+      { id: 'l1', name: '槓鈴深蹲', sets: 4, reps: '8-10', completed: false, section: 'main' },
+      { id: 'l2', name: '羅馬尼亞硬舉', sets: 4, reps: '10-12', completed: false, section: 'main' },
+      { id: 'l3', name: '弓箭步行走', sets: 3, reps: '12-15', completed: false, section: 'main' },
+      { id: 'l4', name: '腿推舉', sets: 3, reps: '12-15', completed: false, section: 'main' },
+      { id: 'l5', name: '坐姿腿屈伸', sets: 3, reps: '15-20', completed: false, section: 'main' },
+      { id: 'l6', name: '提踵', sets: 4, reps: '15-20', completed: false, section: 'main' },
+    ]
+  },
+  {
+    id: 'p5',
+    title: "全身燃脂 HIIT",
+    focus: "心肺 / 全身肌群",
+    duration: 30,
+    exercises: [
+      { id: 'h1', name: '開合跳', sets: 3, reps: '45秒', completed: false, section: 'warmup' },
+      { id: 'h2', name: '波比跳', sets: 4, reps: '30秒', completed: false, section: 'main' },
+      { id: 'h3', name: '登山者', sets: 4, reps: '30秒', completed: false, section: 'main' },
+      { id: 'h4', name: '深蹲跳', sets: 4, reps: '30秒', completed: false, section: 'main' },
+      { id: 'h5', name: '高抬腿', sets: 4, reps: '30秒', completed: false, section: 'main' },
+      { id: 'h6', name: '平板支撐', sets: 3, reps: '60秒', completed: false, section: 'core' },
+    ]
   }
 ];
 
@@ -980,7 +1008,7 @@ export const TUTORIALS_DATA: Tutorial[] = [
     equipment: '固定器械',
     difficulty: '中級',
     description: '上肢訓練王牌動作，全面刺激胸大肌。',
-    tips: ['仰臥，雙眼位於槓鈴下方', '握距略寬於肩', '下放至胸口乳頭連線', '推起時吐氣'],
+    tips: ['仰臥，雙眼位於槓鈴下方', '握距略微寬於肩', '下放至胸口乳頭連線', '推起時吐氣'],
     animationType: 'push',
     image: getTutorialImage('BARBELL', '胸部', 'press_side')
   }
