@@ -394,7 +394,7 @@ const Workout: React.FC<WorkoutProps> = ({
       return (
           <div className="fixed inset-0 z-50 bg-white dark:bg-charcoal-950 flex flex-col">
               {/* Active Header */}
-              <div className="p-4 border-b border-gray-100 dark:border-charcoal-800 flex justify-between items-center bg-white dark:bg-charcoal-900">
+              <div className="p-4 border-b border-gray-100 dark:border-charcoal-800 flex justify-between items-center bg-white dark:bg-charcoal-900" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
                   <div>
                       <h2 className="font-bold text-lg">{activePlan.title}</h2>
                       <div className="flex items-center gap-2 text-neon-blue font-mono text-xl font-bold">
@@ -410,7 +410,7 @@ const Workout: React.FC<WorkoutProps> = ({
               </div>
 
               {/* Active Content */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
                   {activeExercises.map((ex, idx) => (
                       <div key={ex.id} className={`p-4 rounded-2xl border-2 transition-all ${idx === currentExerciseIdx ? 'border-neon-blue bg-neon-blue/5' : 'border-gray-100 dark:border-charcoal-800 bg-white dark:bg-charcoal-900'}`}>
                           <div className="flex justify-between items-start mb-2">
@@ -548,10 +548,13 @@ const Workout: React.FC<WorkoutProps> = ({
             </div>
         </div>
 
-        {/* AI Modal */}
+        {/* AI Modal (Bottom Sheet on Mobile) */}
         {showAiModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
-                <div className="bg-white dark:bg-charcoal-800 w-full max-w-md rounded-3xl shadow-2xl p-6">
+            <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-fade-in">
+                <div 
+                    className="bg-white dark:bg-charcoal-800 w-full md:w-full md:max-w-md rounded-t-3xl md:rounded-3xl shadow-2xl p-6 flex flex-col"
+                    style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+                >
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="font-bold text-xl flex items-center gap-2"><Sparkles className="text-neon-purple"/> {t.aiGen}</h3>
                         <button onClick={() => setShowAiModal(false)}><X size={24} className="text-gray-400"/></button>
@@ -577,10 +580,13 @@ const Workout: React.FC<WorkoutProps> = ({
             </div>
         )}
 
-        {/* Day Detail Modal */}
+        {/* Day Detail Modal (Bottom Sheet on Mobile) */}
         {showDayDetailModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
-                <div className="bg-white dark:bg-charcoal-800 w-full max-w-md rounded-3xl shadow-2xl p-6 max-h-[80vh] flex flex-col">
+            <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-fade-in">
+                <div 
+                    className="bg-white dark:bg-charcoal-800 w-full md:w-full md:max-w-md rounded-t-3xl md:rounded-3xl shadow-2xl p-6 max-h-[90vh] md:max-h-[80vh] flex flex-col"
+                    style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+                >
                     <div className="flex justify-between items-center mb-6 shrink-0">
                         <div>
                             <h3 className="font-bold text-xl">{selectedDate}</h3>
@@ -589,7 +595,7 @@ const Workout: React.FC<WorkoutProps> = ({
                         <button onClick={() => setShowDayDetailModal(false)}><X size={24} className="text-gray-400"/></button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-[150px]">
                         {/* Scheduled Workouts */}
                         {schedule.filter(s => s.date === selectedDate).map((item, idx) => {
                             const plan = allPlans.find(p => p.id === item.planId);
@@ -624,7 +630,7 @@ const Workout: React.FC<WorkoutProps> = ({
                                         setEvents(newEvents);
                                         await apiDeleteEvent(event.id);
                                     }}
-                                    className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 transition-all"
+                                    className="p-2 text-gray-400 hover:text-red-500 transition-all"
                                 >
                                     <Trash2 size={16}/>
                                 </button>
@@ -642,7 +648,7 @@ const Workout: React.FC<WorkoutProps> = ({
 
                     <button 
                         onClick={() => { setShowDayDetailModal(false); setShowAddEventModal(true); }}
-                        className="mt-6 w-full py-3 bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold rounded-xl flex items-center justify-center gap-2"
+                        className="mt-6 w-full py-3 bg-charcoal-900 dark:bg-white text-white dark:text-charcoal-900 font-bold rounded-xl flex items-center justify-center gap-2 shrink-0"
                     >
                         <Plus size={18}/> {t.addToSchedule}
                     </button>
@@ -650,7 +656,7 @@ const Workout: React.FC<WorkoutProps> = ({
             </div>
         )}
 
-        {/* Delete Confirmation Modal */}
+        {/* Delete Confirmation Modal (Keep as Center Modal) */}
         {planToDeleteId && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                 <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
@@ -679,16 +685,19 @@ const Workout: React.FC<WorkoutProps> = ({
             </div>
         )}
 
-        {/* Add Event/Workout Modal */}
+        {/* Add Event/Workout Modal (Bottom Sheet on Mobile) */}
         {showAddEventModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
-                <div className="bg-white dark:bg-charcoal-800 w-full max-w-sm rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6">
+            <div className="fixed inset-0 z-[60] flex flex-col justify-end md:justify-center md:items-center bg-black/70 backdrop-blur-sm sm:p-4 animate-fade-in">
+                <div 
+                    className="bg-white dark:bg-charcoal-800 w-full md:w-full md:max-w-sm rounded-t-3xl md:rounded-2xl shadow-xl border border-gray-200 dark:border-charcoal-700 p-6 flex flex-col"
+                    style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+                >
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold">{t.addToSchedule}</h3>
                         <button onClick={() => setShowAddEventModal(false)}><X size={20} className="text-gray-400"/></button>
                     </div>
 
-                    <div className="flex bg-gray-100 dark:bg-charcoal-900 p-1 rounded-xl mb-6">
+                    <div className="flex bg-gray-100 dark:bg-charcoal-900 p-1 rounded-xl mb-6 shrink-0">
                         <button 
                             onClick={() => setEventType('WORKOUT')} 
                             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${eventType === 'WORKOUT' ? 'bg-white dark:bg-charcoal-800 shadow text-charcoal-900 dark:text-white' : 'text-gray-500'}`}
