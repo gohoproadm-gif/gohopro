@@ -3,7 +3,8 @@
 <html lang="zh-Hant" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="https://lucide.dev/logo.light.svg" />
+    <link rel="icon" type="image/png" href="https://i.imgur.com/8Q50e6I.png" />
+    <link rel="apple-touch-icon" href="https://i.imgur.com/8Q50e6I.png" />
     <!-- Updated Viewport for Native App Feel: viewport-fit=cover handles the notch -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#111827" />
@@ -69,9 +70,11 @@
         -webkit-user-select: none;
         user-select: none;
         -webkit-tap-highlight-color: transparent;
-        /* Handle iOS Safe Areas */
-        padding-top: env(safe-area-inset-top);
-        padding-bottom: env(safe-area-inset-bottom);
+        /* Handle iOS Safe Areas - Default variables if env not supported */
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
       }
       /* Allow text selection in inputs */
       input, textarea {
@@ -81,11 +84,17 @@
       /* Smooth scrolling */
       html {
         scroll-behavior: smooth;
+        height: 100%;
+      }
+      #root {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
       }
     </style>
     
-    <!-- PWA Manifest Placeholder -->
-    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIkdvaG9wcm8iLAogICJzaG9ydF9uYW1lIjogIkdvaG9wcm8iLAogICJzdGFydF91cmwiOiAiLyIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzExMTgyNyIsCiAgInRoZW1lX2NvbG9yIjogIiMxMTE4MjciCn0=" />
+    <!-- PWA Manifest Placeholder (Updated with Icon) -->
+    <link rel="manifest" href="data:application/manifest+json;base64,eyJuYW1lIjoiR29ob3BybyIsInNob3J0X25hbWUiOiJHb2hvcHJvIiwic3RhcnRfdXJsIjoiLyIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiMxMTE4MjciLCJ0aGVtZV9jb2xvciI6IiMxMTE4MjciLCJpY29ucyI6W3sic3JjIjoiaHR0cHM6Ly9pLmltZ3VyLmNvbS84UTUwZTZJLnBuZyIsInNpemVzIjoiMTkyeDE5MiIsInR5cGUiOiJpbWFnZS9wbmcifSx7InNyYyI6Imh0dHBzOi8vaS5pbWd1ci5jb20vOFE1MGU2SS5wbmciLCJzaXplcyI6IjUxMng1MTIiLCJ0eXBlIjoiaW1hZ2UvcG5nIn1dfQ==" />
   <script type="importmap">
 {
   "imports": {
@@ -105,7 +114,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-gray-100 dark:bg-charcoal-950 text-gray-800 dark:text-gray-100 transition-colors duration-300 min-h-screen">
+  <body class="bg-gray-100 dark:bg-charcoal-950 text-gray-800 dark:text-gray-100 transition-colors duration-300 min-h-screen overscroll-none">
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

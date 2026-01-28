@@ -65,9 +65,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, 
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans">
-      {/* Mobile Top Header */}
-      <header className="md:hidden sticky top-0 z-40 bg-white/90 dark:bg-charcoal-900/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex justify-between items-center shadow-sm">
+    <div className="min-h-screen flex flex-col font-sans bg-gray-100 dark:bg-charcoal-950">
+      {/* Mobile Top Header - Sticky with safe area padding */}
+      <header className="md:hidden sticky top-0 z-40 bg-white/90 dark:bg-charcoal-900/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex justify-between items-center shadow-sm transition-all">
         <div className="flex items-center gap-2" onClick={() => setCurrentView(View.DASHBOARD)}>
            <Dumbbell className="w-6 h-6 text-cta-orange" />
            <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-neon-green to-neon-blue bg-clip-text text-transparent">Gohopro</span>
@@ -142,24 +142,25 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setCurrentView, 
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto mb-20 md:mb-0 transition-all">
+      {/* Main Content Area - Added padding bottom to prevent content hiding behind bottom nav */}
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto mb-[80px] md:mb-0 transition-all overscroll-y-contain">
         <div className="max-w-7xl mx-auto animate-fade-in">
           {children}
         </div>
       </main>
 
-      {/* Mobile Bottom Navbar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-charcoal-900/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 z-50 pb-safe">
-        <div className="flex justify-between items-center px-4 py-1 overflow-x-auto">
+      {/* Mobile Bottom Navbar - Added safe area padding for Home Indicator */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-charcoal-900/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 z-50 transition-all"
+           style={{ paddingBottom: 'env(safe-area-inset-bottom, 20px)' }}>
+        <div className="flex justify-between items-center px-2 pt-1 pb-1">
           {navItems.map((item) => (
             <button
               key={item.view}
               onClick={() => setCurrentView(item.view)}
-              className={`flex flex-col items-center p-2 rounded-lg transition-colors duration-200 min-w-[50px] flex-1 ${
+              className={`flex flex-col items-center p-2 rounded-lg transition-colors duration-200 min-w-[50px] flex-1 active:scale-95 ${
                 currentView === item.view 
                 ? 'text-cta-orange' 
-                : 'text-gray-500 dark:text-gray-500 hover:text-neon-blue'
+                : 'text-gray-400 dark:text-gray-500 hover:text-neon-blue'
               }`}
             >
               <item.icon size={22} strokeWidth={currentView === item.view ? 2.5 : 2} />
